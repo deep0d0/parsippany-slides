@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
-import { chmod, readFile, rename, writeFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { chmod, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { buildDigest, digestBody, digestSlides } from "../src/shared/digest";
 import { visibleSlides, type Deck, type TelegramStatus } from "../src/shared/types";
 
@@ -98,6 +98,7 @@ export class TelegramService {
   };
   private loaded = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private saveQueue: Promise<void> = Promise.resolve();
   private syncing = false;
 
   constructor(
@@ -174,7 +175,9 @@ export class TelegramService {
     } else {
       this.config.pendingSince = 0;
     }
-    void this.save();
+    void this.save().catch((error: unknown) => {
+      console.error("telegram: could not save digest state", error);
+    });
     if (body && this.config.enabled && this.configured()) this.schedulePendingSync();
     else this.clearTimer();
   }
@@ -442,10 +445,19 @@ export class TelegramService {
     throw new TelegramError(description, status);
   }
 
-  private async save(): Promise<void> {
-    const temp = `${this.file}.${process.pid}.${Date.now()}.tmp`;
-    await writeFile(temp, JSON.stringify(this.config, null, 2), { mode: 0o600 });
-    await rename(temp, this.file);
-    await chmod(this.file, 0o600).catch(() => undefined);
+  private save(): Promise<void> {
+    const snapshot = JSON.stringify(this.config, null, 2);
+    const temp = `${this.file}.${process.pid}.${randomUUID()}.tmp`;
+    const write = this.saveQueue.then(async () => {
+      try {
+        await writeFile(temp, snapshot, { mode: 0o600 });
+        await rename(temp, this.file);
+        await chmod(this.file, 0o600).catch(() => undefined);
+      } finally {
+        await rm(temp, { force: true }).catch(() => undefined);
+      }
+    });
+    this.saveQueue = write.catch(() => undefined);
+    return write;
   }
 }
