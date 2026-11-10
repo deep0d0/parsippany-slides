@@ -76,7 +76,7 @@ export function TelegramPanel({ onClose }: { onClose: () => void }) {
     run(
       "Saving",
       saveSettings,
-      enabled ? "Saved. The channel will be checked after the first edit or every 30 minutes." : "Saved.",
+      enabled ? "Saved. The post updates after five minutes of quiet, or after 45 minutes of continuous editing." : "Saved.",
     );
 
   const discover = () =>
@@ -207,15 +207,20 @@ export function TelegramPanel({ onClose }: { onClose: () => void }) {
             <strong>{status?.lastSyncedAt ? digestTimestamp(status.lastSyncedAt) : "Never"}</strong>
           </p>
           <p>
-            <span>Next check</span>
+            <span>Next update</span>
             <strong>
-              {status?.nextRunAt ? digestTimestamp(status.nextRunAt) : "Off"}
+              {status?.nextRunAt
+                ? digestTimestamp(status.nextRunAt)
+                : status?.enabled
+                  ? "Waiting for edits"
+                  : "Off"}
             </strong>
           </p>
         </div>
         <p className="hint">
-          Automatic checks run Friday–Sunday every 30 minutes (America/New_York). Edits trigger one update after
-          about 90 seconds of quiet, and only when the text actually changes.
+          After a tagged slide changes, the post updates once the text has been quiet for five minutes. If
+          editing continues, it refreshes after 45 minutes without an update. Only changed text is sent;
+          there is no fixed weekday schedule.
         </p>
         {status?.lastError ? <p className="sheet-error">Last error: {status.lastError}</p> : null}
 

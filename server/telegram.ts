@@ -4,12 +4,9 @@ import { buildDigest, digestBody, digestSlides } from "../src/shared/digest";
 import { visibleSlides, type Deck, type TelegramStatus } from "../src/shared/types";
 
 const API = "https://api.telegram.org";
-const PERIOD_MS = 30 * 60 * 1000;
-const EDIT_DELAY_MS = 90 * 1000;
-const MIN_GAP_MS = 60 * 1000;
+const IDLE_MS = 5 * 60 * 1000;
+const MAX_PENDING_MS = 45 * 60 * 1000;
 const MESSAGE_LIMIT = 3900;
-const TIME_ZONE = "America/New_York";
-const SYNC_DAYS = new Set(["Fri", "Sat", "Sun"]);
 
 export class TelegramError extends Error {
   status: number;
@@ -27,6 +24,8 @@ type Stored = {
   enabled: boolean;
   messageIds: number[];
   lastBodyHash: string;
+  lastSyncedBodyHash: string;
+  pendingSince: number;
   lastContentAt: number;
   lastSyncedAt: number;
   lastError: string;
@@ -91,15 +90,15 @@ export class TelegramService {
     enabled: false,
     messageIds: [],
     lastBodyHash: "",
+    lastSyncedBodyHash: "",
+    pendingSince: 0,
     lastContentAt: 0,
     lastSyncedAt: 0,
     lastError: "",
   };
   private loaded = false;
-  private timer: ReturnType<typeof setInterval> | null = null;
-  private debounce: ReturnType<typeof setTimeout> | null = null;
+  private timer: ReturnType<typeof setTimeout> | null = null;
   private syncing = false;
-  private queued = false;
 
   constructor(
     private readonly file: string,
@@ -119,6 +118,14 @@ export class TelegramService {
             ? raw.messageIds.filter((id): id is number => Number.isInteger(id) && id > 0)
             : [],
           lastBodyHash: text(raw.lastBodyHash),
+          lastSyncedBodyHash:
+            text(raw.lastSyncedBodyHash) ||
+            (typeof raw.lastSyncedAt === "number" &&
+            raw.lastSyncedAt > 0 &&
+            (typeof raw.lastContentAt !== "number" || raw.lastContentAt <= raw.lastSyncedAt)
+              ? text(raw.lastBodyHash)
+              : ""),
+          pendingSince: typeof raw.pendingSince === "number" ? raw.pendingSince : 0,
           lastContentAt: typeof raw.lastContentAt === "number" ? raw.lastContentAt : 0,
           lastSyncedAt: typeof raw.lastSyncedAt === "number" ? raw.lastSyncedAt : 0,
           lastError: text(raw.lastError),
@@ -128,14 +135,11 @@ export class TelegramService {
       // No saved settings yet, or the file is unreadable. Start empty.
     }
     this.loaded = true;
-    this.startTimer();
+    this.schedulePendingSync();
   }
 
   stop(): void {
-    if (this.timer) clearInterval(this.timer);
-    if (this.debounce) clearTimeout(this.debounce);
-    this.timer = null;
-    this.debounce = null;
+    this.clearTimer();
   }
 
   status(): TelegramStatus {
@@ -150,7 +154,7 @@ export class TelegramService {
       lastSyncedAt: this.config.lastSyncedAt,
       lastContentAt: this.config.lastContentAt,
       lastError: this.config.lastError,
-      nextRunAt: this.config.enabled && this.configured() ? this.nextAllowedRun() : 0,
+      nextRunAt: this.config.enabled && this.configured() ? this.nextRunAt() : 0,
       digest: deck ? buildDigest(deck, this.config.lastContentAt || Date.now()) : "",
       tagged,
       visible: deck ? visibleSlides(deck).length : 0,
@@ -165,8 +169,14 @@ export class TelegramService {
     if (hash === this.config.lastBodyHash) return;
     this.config.lastBodyHash = hash;
     this.config.lastContentAt = body ? Date.now() : 0;
+    if (body && hash !== this.config.lastSyncedBodyHash) {
+      if (!this.config.pendingSince) this.config.pendingSince = Date.now();
+    } else {
+      this.config.pendingSince = 0;
+    }
     void this.save();
-    if (body && this.config.enabled && this.configured()) this.scheduleEditSync();
+    if (body && this.config.enabled && this.configured()) this.schedulePendingSync();
+    else this.clearTimer();
   }
 
   async update(input: Input): Promise<TelegramStatus> {
@@ -181,6 +191,8 @@ export class TelegramService {
       this.config.token = nextToken;
       if (!sameBot) {
         this.config.messageIds = [];
+        this.config.lastSyncedBodyHash = "";
+        this.config.pendingSince = 0;
         this.config.lastSyncedAt = 0;
       }
       this.config.lastError = "";
@@ -191,6 +203,8 @@ export class TelegramService {
       this.config.chatTitle = "";
       this.config.messageIds = [];
       this.config.lastBodyHash = "";
+      this.config.lastSyncedBodyHash = "";
+      this.config.pendingSince = 0;
       this.config.lastContentAt = 0;
       this.config.lastSyncedAt = 0;
       this.config.lastError = "";
@@ -207,8 +221,8 @@ export class TelegramService {
     }
 
     await this.save();
-    if (this.config.enabled && this.configured()) this.scheduleEditSync(1200);
-    else this.clearDebounce();
+    if (this.config.enabled && this.configured()) this.schedulePendingSync(1200);
+    else this.clearTimer();
     return this.status();
   }
 
@@ -254,6 +268,8 @@ export class TelegramService {
     this.config.chatTitle = text(chat.title) || (chat.username ? `@${chat.username}` : id);
     this.config.messageIds = [];
     this.config.lastBodyHash = "";
+    this.config.lastSyncedBodyHash = "";
+    this.config.pendingSince = 0;
     this.config.lastContentAt = 0;
     this.config.lastSyncedAt = 0;
     this.config.lastError = "";
@@ -268,48 +284,51 @@ export class TelegramService {
     if (!this.config.token) throw new TelegramError("Add a bot token first.");
   }
 
-  private startTimer(): void {
-    if (this.timer) return;
-    this.timer = setInterval(() => {
-      if (!this.config.enabled || !this.configured()) return;
-      const weekday = new Intl.DateTimeFormat("en-US", {
-        timeZone: TIME_ZONE,
-        weekday: "short",
-      }).format(new Date());
-      if (!SYNC_DAYS.has(weekday)) return;
+  private nextRunAt(): number {
+    const deck = this.getDeck();
+    if (!deck) return 0;
+    const body = digestBody(deck);
+    if (!body || bodyHash(body) === this.config.lastSyncedBodyHash) return 0;
+    const now = Date.now();
+    const pendingAt = this.config.pendingSince || this.config.lastContentAt || now;
+    const idleAt = (this.config.lastContentAt || now) + IDLE_MS;
+    const capAt = (this.config.lastSyncedAt || pendingAt) + MAX_PENDING_MS;
+    return Math.max(now, Math.min(idleAt, capAt));
+  }
+
+  /**
+   * Waits for the editor to go quiet for five minutes. If edits keep coming,
+   * the 45-minute cap keeps the channel from going stale indefinitely.
+   */
+  private schedulePendingSync(overrideDelay?: number): void {
+    this.clearTimer();
+    if (!this.config.enabled || !this.configured()) return;
+    const deck = this.getDeck();
+    if (!deck) return;
+    const body = digestBody(deck);
+    if (!body) return;
+    const hash = bodyHash(body);
+    if (hash === this.config.lastSyncedBodyHash) {
+      this.config.pendingSince = 0;
+      return;
+    }
+    const now = Date.now();
+    if (!this.config.pendingSince) {
+      this.config.pendingSince = this.config.lastContentAt || now;
+    }
+    const idleAt = (this.config.lastContentAt || now) + IDLE_MS;
+    const capAt = (this.config.lastSyncedAt || this.config.pendingSince) + MAX_PENDING_MS;
+    const due = overrideDelay === undefined ? Math.min(idleAt, capAt) : now + overrideDelay;
+    this.timer = setTimeout(() => {
+      this.timer = null;
       void this.sync(false).catch(() => undefined);
-    }, PERIOD_MS);
+    }, Math.max(0, due - now));
     this.timer.unref();
   }
 
-  private nextAllowedRun(): number {
-    let at = Date.now() + PERIOD_MS;
-    for (let step = 0; step < 7 * 48; step += 1) {
-      const weekday = new Intl.DateTimeFormat("en-US", {
-        timeZone: TIME_ZONE,
-        weekday: "short",
-      }).format(new Date(at));
-      if (SYNC_DAYS.has(weekday)) return at;
-      at += PERIOD_MS;
-    }
-    return 0;
-  }
-
-  private scheduleEditSync(delay = EDIT_DELAY_MS): void {
-    if (!this.config.enabled || !this.configured()) return;
-    this.clearDebounce();
-    const since = this.config.lastSyncedAt ? Date.now() - this.config.lastSyncedAt : MIN_GAP_MS;
-    const wait = Math.max(delay, MIN_GAP_MS - since);
-    this.debounce = setTimeout(() => {
-      this.debounce = null;
-      void this.sync(false).catch(() => undefined);
-    }, wait);
-    this.debounce.unref();
-  }
-
-  private clearDebounce(): void {
-    if (this.debounce) clearTimeout(this.debounce);
-    this.debounce = null;
+  private clearTimer(): void {
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
   }
 
   private async sync(manual: boolean): Promise<void> {
@@ -318,11 +337,9 @@ export class TelegramService {
       return;
     }
     if (!manual && !this.config.enabled) return;
-    if (this.syncing) {
-      this.queued = true;
-      return;
-    }
+    if (this.syncing) return;
     this.syncing = true;
+    let completed = false;
     try {
       const deck = this.getDeck();
       if (!deck) return;
@@ -337,6 +354,13 @@ export class TelegramService {
       if (hash !== this.config.lastBodyHash) {
         this.config.lastBodyHash = hash;
         this.config.lastContentAt = Date.now();
+      }
+      if (!manual && hash === this.config.lastSyncedBodyHash) {
+        this.config.pendingSince = 0;
+        this.config.lastError = "";
+        await this.save();
+        completed = true;
+        return;
       }
       const at = this.config.lastContentAt || Date.now();
       const parts = splitMessage(buildDigest(deck, at));
@@ -381,9 +405,12 @@ export class TelegramService {
       }
 
       this.config.messageIds = newIds;
+      this.config.lastSyncedBodyHash = hash;
+      this.config.pendingSince = 0;
       this.config.lastSyncedAt = Date.now();
       this.config.lastError = "";
       await this.save();
+      completed = true;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not update the Telegram post.";
       this.config.lastError = message;
@@ -391,10 +418,7 @@ export class TelegramService {
       throw error;
     } finally {
       this.syncing = false;
-      if (this.queued) {
-        this.queued = false;
-        if (this.config.enabled) this.scheduleEditSync(500);
-      }
+      if (completed && this.config.enabled) this.schedulePendingSync();
     }
   }
 

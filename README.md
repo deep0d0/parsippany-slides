@@ -73,9 +73,10 @@ channel `@username`/ID). Turn on **Automatic updates**, **Save**, and **Sync now
 only edits its own message; if that message is gone it posts a new one silently and removes the
 old one when Telegram allows it.
 
-Automatic checks run every 30 minutes on Friday, Saturday, and Sunday in America/New_York. After
-an edit to a tagged slide, the post updates once the edits have been quiet for about 90 seconds,
-with a one-minute minimum between updates. If the text did not change, nothing is sent.
+Automatic updates are edit-driven. After a tagged slide changes, the post is edited in place once
+the text has been quiet for five minutes. If editing continues, it still refreshes after 45 minutes
+without an update. There is no fixed weekday or 30-minute polling schedule, and unchanged text is
+not reposted.
 
 The token is stored on the server in `DATA_DIR/telegram.json` with mode `600`, is never returned
 to the browser, and is not part of the repository. Back that file up with the rest of `data`, or
