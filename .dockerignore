@@ -1,0 +1,13 @@
+node_modules
+/dist
+/dist-server
+/data
+/appdata
+/.git
+/.wrangler
+/.freebuff
+.DS_Store
+*.log
+*.zip
+CHAT_HISTORY.md
+/Sponsorship Slides Archive

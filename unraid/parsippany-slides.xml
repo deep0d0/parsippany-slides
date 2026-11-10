@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>ParsippanySlides</Name>
+  <Repository>ghcr.io/deep0d0/parsippany-slides:latest</Repository>
+  <Registry>https://ghcr.io</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support/>
+  <Project>https://github.com/deep0d0/parsippany-slides</Project>
+  <Overview>Announcement slides editor with a live lobby screen, a desk remote, and a sponsorship digest for Telegram. Editor at /, lobby screen at /play, desk remote at /remote.</Overview>
+  <Category>Productivity: Tools:</Category>
+  <WebUI>http://[IP]:[PORT:8080]/</WebUI>
+  <TemplateURL/>
+  <Icon>http://[IP]:[PORT:8080]/icon.svg</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires/>
+  <Config Name="WebUI Port" Target="8080" Default="8080" Mode="tcp" Description="Port for the editor, the lobby screen (/play), and the desk remote (/remote)." Type="Port" Display="always" Required="true" Mask="false">8080</Config>
+  <Config Name="Appdata" Target="/data" Default="/mnt/user/appdata/parsippany-slides" Mode="rw" Description="Room state and Telegram settings. Decks and images live in the Sponsorship Slides Archive path." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/parsippany-slides</Config>
+  <Config Name="Sponsorship Slides Archive" Target="/slides" Default="/mnt/user/AVMandal Files/Sponsorship Slides Archive" Mode="rw" Description="Decks, uploaded images, and the deck library index. Point this at the AVMandal Files share. Must be writable by PUID/PGID. This folder is never uploaded to GitHub or GHCR." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/AVMandal Files/Sponsorship Slides Archive</Config>
+  <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="Owner user ID for the appdata files (99 = nobody on unRAID). Set 0 if the appdata filesystem refuses ownership changes." Type="Variable" Display="advanced" Required="false" Mask="false">99</Config>
+  <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Owner group ID for the appdata files (100 = users on unRAID)." Type="Variable" Display="advanced" Required="false" Mask="false">100</Config>
+  <Config Name="Timezone" Target="TZ" Default="America/New_York" Mode="" Description="Container timezone." Type="Variable" Display="advanced" Required="false" Mask="false">America/New_York</Config>
+</Container>

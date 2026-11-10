@@ -1,0 +1,39 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "parsippany-slides",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-10-24",
+  "upload_source_maps": true,
+  "observability": {
+    "enabled": true,
+    "traces": {
+      "enabled": true
+    }
+  },
+  "workers_dev": true,
+  "routes": [
+    {
+      "pattern": "slides.bapsparsippany.org",
+      "custom_domain": true
+    }
+  ],
+  "assets": {
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "DECK_ROOM",
+        "class_name": "DeckRoom"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["DeckRoom"]
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+node_modules
+/dist
+/dist-server
+/data
+/appdata
+/.wrangler
+.dev.vars
+*.tsbuildinfo
+.DS_Store
+worker-configuration.d.ts
+parsippany-slides.zip
+CHAT_HISTORY.md
+/.freebuff
+/Sponsorship Slides Archive

@@ -1,0 +1,14 @@
+{
+  "id": "starter",
+  "title": "New deck",
+  "seedRevision": 1,
+  "slidePoints": 2160,
+  "slides": [
+    {
+      "id": "s1",
+      "hidden": false,
+      "background": null,
+      "boxes": []
+    }
+  ]
+}

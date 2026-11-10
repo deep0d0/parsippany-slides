@@ -1,0 +1,114 @@
+/* Visby CF, copied from the local FontBase library for this show. */
+
+@font-face {
+  font-family: "Visby CF Thin";
+  src: url("/fonts/VisbyCF-Thin.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Visby CF Thin";
+  src: url("/fonts/VisbyCF-ThinOblique.otf") format("opentype");
+  font-weight: 400;
+  font-style: oblique;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Visby CF Light";
+  src: url("/fonts/VisbyCF-Light.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Visby CF Light";
+  src: url("/fonts/VisbyCF-LightOblique.otf") format("opentype");
+  font-weight: 400;
+  font-style: oblique;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Visby CF";
+  src: url("/fonts/VisbyCF-Regular.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Visby CF";
+  src: url("/fonts/VisbyCF-RegularOblique.otf") format("opentype");
+  font-weight: 400;
+  font-style: oblique;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Visby CF Medium";
+  src: url("/fonts/VisbyCF-Medium.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Visby CF Medium";
+  src: url("/fonts/VisbyCF-MediumOblique.otf") format("opentype");
+  font-weight: 400;
+  font-style: oblique;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Visby CF Demi Bold";
+  src: url("/fonts/VisbyCF-DemiBold.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Visby CF Demi Bold";
+  src: url("/fonts/VisbyCF-DemiBoldOblique.otf") format("opentype");
+  font-weight: 400;
+  font-style: oblique;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Visby CF Bold";
+  src: url("/fonts/VisbyCF-Bold.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Visby CF Bold";
+  src: url("/fonts/VisbyCF-BoldOblique.otf") format("opentype");
+  font-weight: 400;
+  font-style: oblique;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Visby CF Extra Bold";
+  src: url("/fonts/VisbyCF-ExtraBold.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Visby CF Extra Bold";
+  src: url("/fonts/VisbyCF-ExtraBoldOblique.otf") format("opentype");
+  font-weight: 400;
+  font-style: oblique;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Visby CF Heavy";
+  src: url("/fonts/VisbyCF-Heavy.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Visby CF Heavy";
+  src: url("/fonts/VisbyCF-HeavyOblique.otf") format("opentype");
+  font-weight: 400;
+  font-style: oblique;
+  font-display: swap;
+}

@@ -1,0 +1,30 @@
+services:
+  slides:
+    build: .
+    image: ghcr.io/deep0d0/parsippany-slides:latest
+    container_name: parsippany-slides
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      TZ: America/New_York
+      PUID: "99"
+      PGID: "100"
+      SLIDES_ARCHIVE_DIR: /slides
+    volumes:
+      # On unRAID, change this to /mnt/user/appdata/parsippany-slides
+      - ./appdata:/data
+      # Keep decks and images outside the app image and outside appdata.
+      - "./Sponsorship Slides Archive:/slides"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
