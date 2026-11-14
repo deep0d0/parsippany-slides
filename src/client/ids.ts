@@ -60,6 +60,14 @@ export function imageBox(src: string, aspect: number, fit: ImageFit): TextBox {
     src,
     fit,
     aspect,
+    rotation: 0,
+    flipX: false,
+    flipY: false,
+    opacity: 1,
+    cropTop: 0,
+    cropRight: 0,
+    cropBottom: 0,
+    cropLeft: 0,
   };
 }
 

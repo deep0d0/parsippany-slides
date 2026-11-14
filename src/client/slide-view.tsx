@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { isImageBox, type TextBox } from "../shared/types";
 import type { Slide } from "../shared/types";
 
@@ -154,6 +154,7 @@ function Line({
       pointerY: event.clientY,
       frame: { x: box.x, y: box.y, w: box.w, h: box.h },
     };
+    const angle = image ? ((box.rotation ?? 0) * Math.PI) / 180 : 0;
     let latest = start.frame;
     let moved = false;
 
@@ -162,7 +163,17 @@ function Line({
       const dy = (ev.clientY - start.pointerY) / stage.h;
       if (!moved && Math.hypot(ev.clientX - start.pointerX, ev.clientY - start.pointerY) < 3) return;
       moved = true;
-      latest = handle ? resize(start.frame, handle, dx, dy) : move(start.frame, dx, dy);
+      let localDx = dx;
+      let localDy = dy;
+      if (handle && angle) {
+        const pixelX = dx * stage.w;
+        const pixelY = dy * stage.h;
+        const cos = Math.cos(-angle);
+        const sin = Math.sin(-angle);
+        localDx = (pixelX * cos - pixelY * sin) / stage.w;
+        localDy = (pixelX * sin + pixelY * cos) / stage.h;
+      }
+      latest = handle ? resize(start.frame, handle, localDx, localDy) : move(start.frame, dx, dy);
       onDraft(latest);
     };
     const onUp = () => {
@@ -190,6 +201,9 @@ function Line({
         justifyContent: justify,
         color: box.color,
         textAlign: box.align,
+        transform: image
+          ? `rotate(${box.rotation ?? 0}deg) scaleX(${box.flipX ? -1 : 1}) scaleY(${box.flipY ? -1 : 1})`
+          : undefined,
       }}
       onPointerDown={gesture()}
       onContextMenu={(event) => {
@@ -204,14 +218,12 @@ function Line({
         onEdit?.(box.id);
       }}
     >
-      {image ? (
-        <img
+      {isImageBox(box) ? (
+        <div
           className="line-art"
-          src={box.src}
-          alt=""
-          draggable={false}
-          decoding="async"
-          style={{ objectFit: box.fit }}
+          role="img"
+          aria-label={box.name}
+          style={{ ...imageStyle(box, stage), opacity: box.opacity ?? 1 }}
         />
       ) : (
         <div
@@ -250,6 +262,40 @@ function Line({
 
 function orderedBoxes(boxes: TextBox[]): TextBox[] {
   return [...boxes.filter(isImageBox), ...boxes.filter((box) => !isImageBox(box))];
+}
+
+/** Map the current frame, fit, and source crop to a CSS background cover. */
+function imageStyle(box: TextBox, stage: Stage): CSSProperties {
+  if (!isImageBox(box)) return {};
+  const frameW = box.w * stage.w;
+  const frameH = box.h * stage.h;
+  if (frameW <= 0 || frameH <= 0) return {};
+  const left = box.cropLeft ?? 0;
+  const right = box.cropRight ?? 0;
+  const top = box.cropTop ?? 0;
+  const bottom = box.cropBottom ?? 0;
+  const sourceW = Math.max(0.1, 1 - left - right);
+  const sourceH = Math.max(0.1, 1 - top - bottom);
+  const sourceAspect = Math.max(0.1, box.aspect ?? 16 / 9) * (sourceW / sourceH);
+  const frameAspect = frameW / frameH;
+  const cover = box.fit !== "contain";
+  let regionW: number;
+  let regionH: number;
+  if ((cover && sourceAspect >= frameAspect) || (!cover && sourceAspect < frameAspect)) {
+    regionH = frameH;
+    regionW = regionH * sourceAspect;
+  } else {
+    regionW = frameW;
+    regionH = regionW / sourceAspect;
+  }
+  const imageW = regionW / sourceW;
+  const imageH = regionH / sourceH;
+  return {
+    backgroundImage: `url("${box.src}")`,
+    backgroundSize: `${imageW}px ${imageH}px`,
+    backgroundPosition: `${(frameW - regionW) / 2 - left * imageW}px ${(frameH - regionH) / 2 - top * imageH}px`,
+    backgroundRepeat: "no-repeat",
+  };
 }
 
 function move(start: Frame, dx: number, dy: number): Frame {

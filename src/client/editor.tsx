@@ -174,6 +174,10 @@ export function Editor() {
   const patchBox = (patch: BoxPatch) => {
     for (const boxId of selectedIds) send({ type: "updateBox", slideId: slide.id, boxId, patch });
   };
+  const patchImage = (patch: BoxPatch) => {
+    if (!box || !isImageBox(box)) return;
+    send({ type: "updateBox", slideId: slide.id, boxId: box.id, patch });
+  };
   const align = (edge: AlignEdge, target: AlignTarget) => {
     const chosen = slide.boxes.filter((item) => selectedIds.includes(item.id));
     for (const frame of alignFrames(chosen, target, edge)) {
@@ -236,6 +240,14 @@ export function Editor() {
       created.y = Math.min(source.y + 0.03, Math.max(0, 1 - source.h));
       created.w = source.w;
       created.h = source.h;
+      created.rotation = source.rotation;
+      created.flipX = source.flipX;
+      created.flipY = source.flipY;
+      created.opacity = source.opacity;
+      created.cropTop = source.cropTop;
+      created.cropRight = source.cropRight;
+      created.cropBottom = source.cropBottom;
+      created.cropLeft = source.cropLeft;
     }
     send({ type: "addBox", slideId: slide.id, box: created });
     setSelectedIds([created.id]);
@@ -579,6 +591,98 @@ export function Editor() {
                   }}
                 />
               </label>
+              {box && isImageBox(box) ? (
+                <div className="image-controls">
+                  <div className="image-controls-head">
+                    <h3>Image adjustments</h3>
+                    <button
+                      type="button"
+                      className="link-button"
+                      onClick={() =>
+                        patchImage({
+                          rotation: 0,
+                          flipX: false,
+                          flipY: false,
+                          opacity: 1,
+                          cropTop: 0,
+                          cropRight: 0,
+                          cropBottom: 0,
+                          cropLeft: 0,
+                        })
+                      }
+                    >
+                      Reset
+                    </button>
+                  </div>
+                  <label className="image-slider">
+                    <span>Rotation</span>
+                    <input
+                      type="range"
+                      min={-180}
+                      max={180}
+                      step={1}
+                      value={box.rotation ?? 0}
+                      onChange={(event) => patchImage({ rotation: Number(event.currentTarget.value) })}
+                    />
+                    <output>{Math.round(box.rotation ?? 0)}°</output>
+                  </label>
+                  <div className="image-flips">
+                    <button
+                      type="button"
+                      className={box.flipX ? "tool is-on" : "tool"}
+                      aria-pressed={Boolean(box.flipX)}
+                      onClick={() => patchImage({ flipX: !box.flipX })}
+                    >
+                      Flip horizontal
+                    </button>
+                    <button
+                      type="button"
+                      className={box.flipY ? "tool is-on" : "tool"}
+                      aria-pressed={Boolean(box.flipY)}
+                      onClick={() => patchImage({ flipY: !box.flipY })}
+                    >
+                      Flip vertical
+                    </button>
+                  </div>
+                  <label className="image-slider">
+                    <span>Opacity</span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={Math.round((box.opacity ?? 1) * 100)}
+                      onChange={(event) => patchImage({ opacity: Number(event.currentTarget.value) / 100 })}
+                    />
+                    <output>{Math.round((box.opacity ?? 1) * 100)}%</output>
+                  </label>
+                  <fieldset className="crop-grid">
+                    <legend>Crop (%)</legend>
+                    {([["Top", "cropTop"], ["Right", "cropRight"], ["Bottom", "cropBottom"], ["Left", "cropLeft"]] as const).map(
+                      ([label, key]) => (
+                        <label key={key}>
+                          <span>{label}</span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={45}
+                            step={1}
+                            value={Math.round((box[key] ?? 0) * 100)}
+                            onChange={(event) => {
+                              const percent = Number(event.currentTarget.value);
+                              if (Number.isFinite(percent)) {
+                                patchImage({ [key]: Math.max(0, Math.min(45, percent)) / 100 } as BoxPatch);
+                              }
+                            }}
+                          />
+                          <span>%</span>
+                        </label>
+                      ),
+                    )}
+                  </fieldset>
+                  <p className="hint">Crop trims from each edge of the source image.</p>
+                </div>
+              ) : null}
               <p className="hint">
                 New slide starts blank. Add a text box or an image, then right-click to duplicate or delete.
                 Ctrl+C copies the selection and Ctrl+Shift+V pastes it in place (⌘ on a Mac).

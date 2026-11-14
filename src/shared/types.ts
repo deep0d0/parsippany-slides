@@ -43,6 +43,18 @@ export type TextBox = {
   src?: string;
   fit?: ImageFit;
   aspect?: number;
+  /** Image-only: clockwise rotation in degrees. */
+  rotation?: number;
+  /** Image-only: mirror across the vertical or horizontal axis. */
+  flipX?: boolean;
+  flipY?: boolean;
+  /** Image-only: 0–1. */
+  opacity?: number;
+  /** Image-only: source crop insets, each 0–0.45. */
+  cropTop?: number;
+  cropRight?: number;
+  cropBottom?: number;
+  cropLeft?: number;
 };
 
 export type BoxPatch = Partial<
@@ -60,6 +72,14 @@ export type BoxPatch = Partial<
     | "anchor"
     | "italic"
     | "fit"
+    | "rotation"
+    | "flipX"
+    | "flipY"
+    | "opacity"
+    | "cropTop"
+    | "cropRight"
+    | "cropBottom"
+    | "cropLeft"
     | "padTop"
     | "padRight"
     | "padBottom"

@@ -40,6 +40,16 @@ export function sanitizeSeconds(value: unknown): number | null {
   return Math.min(MAX_ADVANCE_SECONDS, Math.max(MIN_ADVANCE_SECONDS, Math.round(value)));
 }
 
+function normalizeRotation(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
+  const wrapped = ((value % 360) + 360) % 360;
+  return wrapped > 180 ? wrapped - 360 : wrapped;
+}
+
+function cropInset(value: unknown): number {
+  return clampUnit(typeof value === "number" ? value : 0, 0, 0.45);
+}
+
 function fitFrame(frame: Pick<TextBox, "x" | "y" | "w" | "h">): Pick<TextBox, "x" | "y" | "w" | "h"> {
   const w = clampUnit(frame.w, 0.04, 1);
   const h = clampUnit(frame.h, 0.03, 1);
@@ -80,6 +90,14 @@ function sanitizeBox(box: TextBox): TextBox | null {
     cleaned.src = box.src;
     cleaned.fit = box.fit === "contain" ? "contain" : "cover";
     cleaned.aspect = clampUnit(typeof box.aspect === "number" ? box.aspect : 16 / 9, 0.1, 10);
+    cleaned.rotation = normalizeRotation(box.rotation);
+    cleaned.flipX = Boolean(box.flipX);
+    cleaned.flipY = Boolean(box.flipY);
+    cleaned.opacity = clampUnit(typeof box.opacity === "number" ? box.opacity : 1, 0, 1);
+    cleaned.cropTop = cropInset(box.cropTop);
+    cleaned.cropRight = cropInset(box.cropRight);
+    cleaned.cropBottom = cropInset(box.cropBottom);
+    cleaned.cropLeft = cropInset(box.cropLeft);
     cleaned.text = "";
     cleaned.padTop = 0;
     cleaned.padRight = 0;
@@ -91,6 +109,14 @@ function sanitizeBox(box: TextBox): TextBox | null {
   delete cleaned.src;
   delete cleaned.fit;
   delete cleaned.aspect;
+  delete cleaned.rotation;
+  delete cleaned.flipX;
+  delete cleaned.flipY;
+  delete cleaned.opacity;
+  delete cleaned.cropTop;
+  delete cleaned.cropRight;
+  delete cleaned.cropBottom;
+  delete cleaned.cropLeft;
   return cleaned;
 }
 
@@ -125,7 +151,21 @@ function applyPatch(box: TextBox, patch: BoxPatch) {
   if (typeof patch.padRight === "number") box.padRight = clampUnit(patch.padRight, 0, 0.2);
   if (typeof patch.padBottom === "number") box.padBottom = clampUnit(patch.padBottom, 0, 0.2);
   if (typeof patch.padLeft === "number") box.padLeft = clampUnit(patch.padLeft, 0, 0.2);
-  if (box.kind === "image" && (patch.fit === "cover" || patch.fit === "contain")) box.fit = patch.fit;
+  if (box.kind === "image") {
+    if (patch.fit === "cover" || patch.fit === "contain") box.fit = patch.fit;
+    if (typeof patch.rotation === "number" && Number.isFinite(patch.rotation)) {
+      box.rotation = normalizeRotation(patch.rotation);
+    }
+    if (typeof patch.flipX === "boolean") box.flipX = patch.flipX;
+    if (typeof patch.flipY === "boolean") box.flipY = patch.flipY;
+    if (typeof patch.opacity === "number" && Number.isFinite(patch.opacity)) {
+      box.opacity = clampUnit(patch.opacity, 0, 1);
+    }
+    if (typeof patch.cropTop === "number") box.cropTop = cropInset(patch.cropTop);
+    if (typeof patch.cropRight === "number") box.cropRight = cropInset(patch.cropRight);
+    if (typeof patch.cropBottom === "number") box.cropBottom = cropInset(patch.cropBottom);
+    if (typeof patch.cropLeft === "number") box.cropLeft = cropInset(patch.cropLeft);
+  }
   if (patch.x !== undefined || patch.y !== undefined || patch.w !== undefined || patch.h !== undefined) {
     Object.assign(
       box,

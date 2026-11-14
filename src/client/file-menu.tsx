@@ -69,6 +69,11 @@ export function FileMenu({ currentId }: { currentId: string }) {
       const slides = imported.slides.map((slide) => ({
         ...slide,
         background: slide.background ? `/api/media/${made.id}/${slide.background}` : null,
+        boxes: slide.boxes.map((box) => {
+          if (box.kind !== "image" || !box.src?.startsWith("/api/media/pending/")) return box;
+          const name = box.src.slice("/api/media/pending/".length);
+          return { ...box, src: `/api/media/${made.id}/${name}` };
+        }),
       }));
       const opened = await send("The imported deck", `/api/files/${made.id}/open`, {
         method: "POST",
