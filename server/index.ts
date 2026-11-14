@@ -19,6 +19,7 @@ import { reduce, sanitizeSeconds, sanitizeSlides, sanitizeTitle } from "../src/s
 import { TelegramError, TelegramService } from "./telegram";
 import {
   DEFAULT_ADVANCE_SECONDS,
+  MAX_MEDIA_BYTES,
   isClientMessage,
   visibleSlides,
   type Deck,
@@ -27,7 +28,6 @@ import {
 } from "../src/shared/types";
 
 const seed = seedJson as Deck;
-const MAX_MEDIA_BYTES = 2_500_000;
 const MAX_FILES = 20;
 const MAX_BODY_BYTES = 8_000_000;
 
@@ -275,7 +275,7 @@ class Room {
   async saveMedia(fileId: string, name: string, mime: string, bytes: Uint8Array): Promise<void> {
     if (!this.files.has(fileId)) throw new HttpError("Unknown file", 404);
     if (bytes.byteLength < 8 || bytes.byteLength > MAX_MEDIA_BYTES) {
-      throw new HttpError("That image is too large to save.", 413);
+      throw new HttpError(`That image is too large to save. The limit is ${MAX_MEDIA_BYTES / 1_000_000} MB.`, 413);
     }
     if (!mime.startsWith("image/")) throw new HttpError("Only images can be stored.", 415);
     const directory = join(MEDIA_DIR, fileId);
@@ -523,19 +523,36 @@ function sendJson(res: ServerResponse, status: number, data: unknown): void {
 
 function readBody(req: IncomingMessage, limit: number): Promise<Buffer> {
   return new Promise((resolve, reject) => {
+    const declared = Number(req.headers["content-length"]);
+    if (Number.isFinite(declared) && declared > limit) {
+      req.resume();
+      reject(new HttpError("That request is too large.", 413));
+      return;
+    }
     const chunks: Buffer[] = [];
     let size = 0;
+    let tooLarge = false;
+    let settled = false;
     req.on("data", (chunk: Buffer) => {
       size += chunk.length;
       if (size > limit) {
-        reject(new HttpError("That request is too large.", 413));
-        req.destroy();
+        tooLarge = true;
+        chunks.length = 0;
         return;
       }
       chunks.push(chunk);
     });
-    req.on("end", () => resolve(Buffer.concat(chunks)));
-    req.on("error", reject);
+    req.on("end", () => {
+      if (settled) return;
+      settled = true;
+      if (tooLarge) reject(new HttpError("That request is too large.", 413));
+      else resolve(Buffer.concat(chunks));
+    });
+    req.on("error", (error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    });
   });
 }
 
@@ -727,7 +744,7 @@ async function handleApi(
       return true;
     }
     if (req.method === "PUT") {
-      const bytes = await readBody(req, MAX_MEDIA_BYTES + 1_000_000);
+      const bytes = await readBody(req, MAX_MEDIA_BYTES);
       const mime = String(req.headers["content-type"] ?? "application/octet-stream");
       await room.saveMedia(fileId, name, mime, new Uint8Array(bytes));
       sendJson(res, 200, { ok: true });
@@ -738,7 +755,7 @@ async function handleApi(
   const open = pathname.match(/^\/api\/files\/([\w-]+)\/open$/);
   if (open && req.method === "POST") {
     const id = safeSegment(open[1]);
-    const body = (await readJson(req).catch(() => null)) as OpenBody | null;
+    const body = (await readJson(req)) as OpenBody | null;
     sendJson(res, 200, { ok: true, ...(await room.openFile(id, body)) });
     return true;
   }

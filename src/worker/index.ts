@@ -1,10 +1,9 @@
 import { DurableObject } from "cloudflare:workers";
 import seedJson from "../data/deck.json";
 import { reduce, sanitizeSeconds, sanitizeSlides, sanitizeTitle } from "../shared/reduce";
-import { isClientMessage, type Deck, type RoomState, type SavedFile } from "../shared/types";
+import { MAX_MEDIA_BYTES, isClientMessage, type Deck, type RoomState, type SavedFile } from "../shared/types";
 
 const seed = seedJson as Deck;
-const MAX_MEDIA_BYTES = 2_500_000;
 const MAX_FILES = 20;
 
 type Bindings = {

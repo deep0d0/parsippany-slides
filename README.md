@@ -35,7 +35,8 @@ Decks, uploaded images, and the deck-library index live in `SLIDES_ARCHIVE_DIR`.
 ships only a blank starter slide and contains no deck content. On unRAID the template mounts
 `/mnt/user/AVMandal Files/Sponsorship Slides Archive` at `/slides`. The app creates `decks/`,
 `media/`, and `library.json` there. `DATA_DIR` keeps only the live room state and Telegram
-settings.
+settings. Images embedded in a PowerPoint, or uploaded directly, can be up to 20 MB each; the
+importer checks extracted artwork before it creates a deck.
 
 ## Tidy up
 

@@ -1,7 +1,16 @@
 import { useEffect, useRef, useState } from "react";
+import { MAX_MEDIA_BYTES } from "../shared/types";
 import { DeckLibrary } from "./deck-library";
 import { copyBytes } from "./media";
 import { importPptx } from "./pptx";
+
+async function send(label: string, url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch {
+    throw new Error(`${label} did not reach the slide server. Check that it is running and try again.`);
+  }
+}
 
 export function FileMenu({ currentId }: { currentId: string }) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -32,8 +41,14 @@ export function FileMenu({ currentId }: { currentId: string }) {
     setError(null);
     try {
       const imported = await importPptx(file);
+      const tooLarge = imported.media.find((item) => item.bytes.byteLength > MAX_MEDIA_BYTES);
+      if (tooLarge) {
+        throw new Error(
+          `${tooLarge.name} is larger than the ${MAX_MEDIA_BYTES / 1_000_000} MB image limit.`,
+        );
+      }
       setBusy("Saving the file");
-      const created = await fetch("/api/files", {
+      const created = await send("The file", "/api/files", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: imported.title }),
@@ -41,7 +56,7 @@ export function FileMenu({ currentId }: { currentId: string }) {
       const made = (await created.json()) as { id?: string; error?: string };
       if (!created.ok || !made.id) throw new Error(made.error || "Could not save that file.");
       for (const item of imported.media) {
-        const sent = await fetch(`/api/files/${made.id}/media/${item.name}`, {
+        const sent = await send(item.name, `/api/files/${made.id}/media/${item.name}`, {
           method: "PUT",
           headers: { "Content-Type": item.mime },
           body: copyBytes(item.bytes),
@@ -55,7 +70,7 @@ export function FileMenu({ currentId }: { currentId: string }) {
         ...slide,
         background: slide.background ? `/api/media/${made.id}/${slide.background}` : null,
       }));
-      const opened = await fetch(`/api/files/${made.id}/open`, {
+      const opened = await send("The imported deck", `/api/files/${made.id}/open`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: imported.title, slides, slidePoints: imported.slidePoints }),

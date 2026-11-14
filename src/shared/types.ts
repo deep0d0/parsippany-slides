@@ -7,6 +7,7 @@ export const SLIDE_ASPECT = 16 / 9;
 export const DEFAULT_ADVANCE_SECONDS = 8;
 export const MIN_ADVANCE_SECONDS = 1;
 export const MAX_ADVANCE_SECONDS = 600;
+export const MAX_MEDIA_BYTES = 20_000_000;
 export type ImageFit = "cover" | "contain";
 
 export const FONT_FAMILIES = [

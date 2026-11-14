@@ -1,6 +1,4 @@
-import { isMediaUrl } from "../shared/types";
-
-const MAX_BYTES = 2_500_000;
+import { MAX_MEDIA_BYTES, isMediaUrl } from "../shared/types";
 
 export function copyBytes(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
   const copy = new Uint8Array(bytes.byteLength);
@@ -10,7 +8,9 @@ export function copyBytes(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
 
 export async function saveImage(fileId: string, file: File): Promise<{ src: string; aspect: number }> {
   if (!file.type.startsWith("image/")) throw new Error("Choose a PNG, JPEG, WebP, or GIF.");
-  if (file.size > MAX_BYTES) throw new Error("That image is too large to save.");
+  if (file.size > MAX_MEDIA_BYTES) {
+    throw new Error(`That image is too large to save. The limit is ${MAX_MEDIA_BYTES / 1_000_000} MB.`);
+  }
   const bytes = new Uint8Array(await file.arrayBuffer());
   const aspect = await imageAspect(bytes, file.type);
   const name = `${mediaId()}.${extension(file)}`;
