@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import seedJson from "../data/deck.json";
+import { ensureAttendanceSlide } from "../shared/attendance";
 import { reduce, sanitizeSeconds, sanitizeSlides, sanitizeTitle } from "../shared/reduce";
 import { MAX_MEDIA_BYTES, isClientMessage, type Deck, type RoomState, type SavedFile } from "../shared/types";
 
@@ -14,7 +15,7 @@ type Bindings = {
 function initialState(fileId: string): RoomState {
   return {
     fileId,
-    deck: { ...seed, id: fileId },
+    deck: { ...seed, id: fileId, slides: ensureAttendanceSlide(seed.slides) },
     index: 0,
     hold: false,
     autoplay: false,
@@ -218,6 +219,7 @@ export class DeckRoom extends DurableObject<Bindings> {
       return created;
     }
     const stored = JSON.parse(rows[0].data) as RoomState;
+    stored.deck.slides = ensureAttendanceSlide(stored.deck.slides);
     if (typeof stored.autoplay !== "boolean") stored.autoplay = false;
     if (!stored.fileId) {
       stored.fileId = stored.deck?.id || seed.id;

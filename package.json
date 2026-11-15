@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "prepare:ocr": "node scripts/copy-ocr-assets.mjs",
+    "predev": "npm run prepare:ocr",
+    "prebuild": "npm run prepare:ocr",
+    "prebuild:cloudflare": "npm run prepare:ocr",
     "dev": "vite",
     "dev:server": "tsx watch server/index.ts",
     "build": "vite build && vite build --config vite.server.config.ts",
@@ -14,15 +18,20 @@
     "import": "python3 scripts/import_pptx.py"
   },
   "dependencies": {
+    "jsqr": "^1.4.0",
     "jszip": "^3.10.2",
     "pptx-browser": "^4.1.5",
+    "qrcode": "^1.5.4",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "tesseract.js": "^7.0.0",
     "ws": "^8.22.2"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.15.3",
+    "@tesseract.js-data/eng": "^1.0.0",
     "@types/node": "^26.6.6",
+    "@types/qrcode": "^1.5.5",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
     "@types/ws": "^8.18.2",

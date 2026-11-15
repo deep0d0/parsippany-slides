@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  ATTENDANCE_BACKGROUND,
+  ATTENDANCE_KIND,
+  attendanceLayout,
+  attendanceValues,
+} from "../shared/attendance";
+import {
   DEFAULT_ADVANCE_SECONDS,
   MAX_ADVANCE_SECONDS,
   MIN_ADVANCE_SECONDS,
@@ -12,6 +18,8 @@ import {
   type TextBox,
 } from "../shared/types";
 import { alignFrames, distributeFrames, type AlignEdge, type AlignTarget, type DistributeAxis } from "./align";
+import { AttendancePanel } from "./attendance-panel";
+import { makeQrFile, readAttendanceImage } from "./attendance";
 import { fitBox, type FitMode } from "./fit-text";
 import { ContextMenu, type MenuItem } from "./context-menu";
 import { FileMenu } from "./file-menu";
@@ -39,10 +47,15 @@ export function Editor() {
   const [pendingImage, setPendingImage] = useState<{ src: string; aspect: number } | null>(null);
   const [imageBusy, setImageBusy] = useState<string | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
+  const [attendanceBusy, setAttendanceBusy] = useState<string | null>(null);
+  const [attendanceNote, setAttendanceNote] = useState<string | null>(null);
+  const [attendanceError, setAttendanceError] = useState<string | null>(null);
   const [tidyOpen, setTidyOpen] = useState(false);
   const [telegramOpen, setTelegramOpen] = useState(false);
   const lineField = useRef<HTMLTextAreaElement>(null);
   const imagePickerRef = useRef<HTMLInputElement>(null);
+  const attendancePickerRef = useRef<HTMLInputElement>(null);
+  const attendanceHandler = useRef<(file: File) => void>(() => {});
   const openFileId = useRef<string | null>(null);
   const clipboard = useRef<TextBox[]>([]);
   const slide = state
@@ -51,6 +64,7 @@ export function Editor() {
   const primaryId = selectedIds[selectedIds.length - 1] ?? null;
   const box = slide?.boxes.find((item) => item.id === primaryId) ?? null;
   const selectedImage = box ? isImageBox(box) : false;
+  const attendanceSlide = slide?.kind === ATTENDANCE_KIND;
   const sponsorTagged = slide ? isSponsorSlide(slide) : false;
 
   useEffect(() => {
@@ -146,7 +160,7 @@ export function Editor() {
         setEditingId(null);
         setHistoryEpoch((epoch) => epoch + 1);
       }
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "d" && slide) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "d" && slide && slide.kind !== ATTENDANCE_KIND) {
         event.preventDefault();
         const created = duplicateSlide(slide);
         send({ type: "insertSlide", afterId: slide.id, slide: created });
@@ -158,6 +172,21 @@ export function Editor() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [redo, selectedIds, send, slide, undo]);
+
+  useEffect(() => {
+    if (!attendanceSlide) return;
+    const onPaste = (event: ClipboardEvent) => {
+      const item = Array.from(event.clipboardData?.items ?? []).find((entry) =>
+        entry.type.startsWith("image/"),
+      );
+      const file = item?.getAsFile();
+      if (!file) return;
+      event.preventDefault();
+      attendanceHandler.current(file);
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [attendanceSlide]);
 
   if (!state || !slide) {
     return (
@@ -209,7 +238,8 @@ export function Editor() {
     setEditingId(boxId);
   };
   const removeSlide = (slideId: string) => {
-    if (state.deck.slides.length <= 1) return;
+    const source = state.deck.slides.find((item) => item.id === slideId);
+    if (!source || source.kind === ATTENDANCE_KIND || state.deck.slides.length <= 1) return;
     const index = state.deck.slides.findIndex((item) => item.id === slideId);
     const neighbor = state.deck.slides[index + 1] ?? state.deck.slides[index - 1];
     send({ type: "deleteSlide", slideId });
@@ -219,7 +249,7 @@ export function Editor() {
   };
   const copySlide = (slideId: string) => {
     const source = state.deck.slides.find((item) => item.id === slideId);
-    if (!source) return;
+    if (!source || source.kind === ATTENDANCE_KIND) return;
     const created = duplicateSlide(source);
     send({ type: "insertSlide", afterId: source.id, slide: created });
     setSelectedSlideId(created.id);
@@ -281,20 +311,59 @@ export function Editor() {
       if (imagePickerRef.current) imagePickerRef.current.value = "";
     }
   };
+  const processAttendance = async (file: File) => {
+    if (!state || !slide || slide.kind !== ATTENDANCE_KIND || attendanceBusy) return;
+    setAttendanceError(null);
+    setAttendanceNote(null);
+    setAttendanceBusy("Reading the QR code");
+    try {
+      const read = await readAttendanceImage(file, setAttendanceBusy);
+      const current = attendanceValues(slide);
+      setAttendanceBusy("Saving the QR code");
+      const saved = await saveImage(state.fileId, await makeQrFile(read.qrText));
+      const boxes = attendanceLayout(saved.src, {
+        title: read.title || current.title,
+        location: read.location || current.location,
+        date: read.date || current.date,
+      });
+      applySlides(
+        state.deck.slides.map((item) =>
+          item.id === slide.id
+            ? {
+                ...item,
+                kind: ATTENDANCE_KIND,
+                backgroundColor: ATTENDANCE_BACKGROUND,
+                boxes,
+              }
+            : item,
+        ),
+      );
+      setSelectedIds([]);
+      setEditingId(null);
+      setAttendanceNote(read.warning ?? "QR code and details updated.");
+    } catch (caught) {
+      setAttendanceError(caught instanceof Error ? caught.message : "Could not read that flyer.");
+    } finally {
+      setAttendanceBusy(null);
+      if (attendancePickerRef.current) attendancePickerRef.current.value = "";
+    }
+  };
+  attendanceHandler.current = processAttendance;
   const menuItems = (): MenuItem[] => {
     if (!menu) return [];
     if (menu.kind === "slide") {
       const target = state.deck.slides.find((item) => item.id === menu.slideId) ?? slide;
+      const permanent = target.kind === ATTENDANCE_KIND;
       return [
-        { label: "Duplicate", onSelect: () => copySlide(target.id) },
+        { label: "Duplicate", disabled: permanent, onSelect: () => copySlide(target.id) },
         {
           label: target.hidden ? "Enable" : "Disable",
           onSelect: () => send({ type: "visibility", slideId: target.id, hidden: !target.hidden }),
         },
         {
-          label: "Delete",
+          label: permanent ? "Attendance slide cannot be deleted" : "Delete",
           danger: true,
-          disabled: state.deck.slides.length <= 1,
+          disabled: permanent || state.deck.slides.length <= 1,
           onSelect: () => removeSlide(target.id),
         },
       ];
@@ -422,6 +491,18 @@ export function Editor() {
           if (file) void pickImage(file);
         }}
       />
+      <input
+        ref={attendancePickerRef}
+        className="sr"
+        type="file"
+        tabIndex={-1}
+        aria-hidden="true"
+        accept="image/png,image/jpeg,image/webp,image/gif,.png,.jpg,.jpeg,.webp,.gif"
+        onChange={(event) => {
+          const file = event.currentTarget.files?.[0];
+          if (file) void processAttendance(file);
+        }}
+      />
 
       <div className="workspace">
         <aside className="rail" aria-label="Slides">
@@ -437,8 +518,12 @@ export function Editor() {
                   .join(" ")}
                 aria-current={onScreen ? "true" : undefined}
                 aria-label={`Slide ${index + 1}. ${slideLabel(item, index + 1)}${item.hidden ? ". Hidden" : ""}${onScreen ? ". On screen" : ""}`}
-                draggable
+                draggable={item.kind !== ATTENDANCE_KIND}
                 onDragStart={(event) => {
+                  if (item.kind === ATTENDANCE_KIND) {
+                    event.preventDefault();
+                    return;
+                  }
                   event.dataTransfer.setData("text/plain", item.id);
                   event.dataTransfer.effectAllowed = "move";
                 }}
@@ -467,6 +552,7 @@ export function Editor() {
                 </span>
                 <span className="thumb-meta">
                   <span>{index + 1}</span>
+                  {item.kind === ATTENDANCE_KIND ? <span className="flag">Attendance</span> : null}
                   {isSponsorSlide(item) ? <span className="flag">Sponsor</span> : null}
                   {onScreen ? <span className="flag">Screen</span> : null}
                   {item.hidden ? <span className="flag is-muted">Hidden</span> : null}
@@ -565,6 +651,17 @@ export function Editor() {
                     ? "Tagged automatically because the slide text mentions sponsor."
                     : "Not tagged automatically. Turn this on to include it."}
               </p>
+
+              {attendanceSlide ? (
+                <AttendancePanel
+                  slide={slide}
+                  busy={attendanceBusy}
+                  note={attendanceNote}
+                  error={attendanceError}
+                  onUpload={() => attendancePickerRef.current?.click()}
+                  onText={(boxId, text) => send({ type: "text", slideId: slide.id, boxId, text })}
+                />
+              ) : null}
 
               <label className="field">
                 <span>{selectedImage ? "Image" : box ? "Selected line" : "Line"}</span>
@@ -684,8 +781,9 @@ export function Editor() {
                 </div>
               ) : null}
               <p className="hint">
-                New slide starts blank. Add a text box or an image, then right-click to duplicate or delete.
-                Ctrl+C copies the selection and Ctrl+Shift+V pastes it in place (⌘ on a Mac).
+                {attendanceSlide
+                  ? "The attendance slide always stays first. You can disable it from the slide menu, but it cannot be deleted."
+                  : "New slide starts blank. Add a text box or an image, then right-click to duplicate or delete. Ctrl+C copies the selection and Ctrl+Shift+V pastes it in place (⌘ on a Mac)."}
               </p>
               {box && !isImageBox(box) ? <p className="font-note">{box.fontFamily}</p> : null}
 

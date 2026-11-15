@@ -89,6 +89,8 @@ export type BoxPatch = Partial<
 
 export type Slide = {
   id: string;
+  /** Special fixed slides, such as the weekly attendance slide. */
+  kind?: "attendance";
   hidden: boolean;
   background: string | null;
   /** Solid fill behind the background image, as #RRGGBB. */
@@ -215,6 +217,7 @@ export function clampIndex(deck: Deck, index: number): number {
 }
 
 export function slideLabel(slide: Slide, number: number): string {
+  if (slide.kind === "attendance") return "Attendance";
   const line = slide.boxes.map((box) => (isImageBox(box) ? "" : box.text.trim())).find(Boolean);
   return line?.split("\n")[0] ?? `Slide ${number}`;
 }

@@ -1,3 +1,4 @@
+import { ensureAttendanceSlide } from "./attendance";
 import {
   FONT_FAMILIES,
   MAX_ADVANCE_SECONDS,
@@ -125,6 +126,7 @@ function sanitizeSlide(slide: Slide): Slide | null {
   const boxes = Array.isArray(slide.boxes) ? slide.boxes.slice(0, MAX_BOXES).map(sanitizeBox) : [];
   const cleaned: Slide = {
     id: slide.id,
+    ...(slide.kind === "attendance" ? { kind: "attendance" as const } : {}),
     hidden: Boolean(slide.hidden),
     background: typeof slide.background === "string" && isMediaUrl(slide.background) ? slide.background : null,
     boxes: boxes.filter((box): box is TextBox => box !== null),
@@ -290,6 +292,7 @@ export function reduce(state: RoomState, message: ClientMessage): RoomState {
 
   if (message.type === "insertSlide") {
     if (next.deck.slides.length >= MAX_SLIDES) return state;
+    if (message.slide?.kind === "attendance") return state;
     const slide = sanitizeSlide(message.slide);
     if (!slide || next.deck.slides.some((item) => item.id === slide.id)) return state;
     const previous = watchingId(next);
@@ -300,7 +303,8 @@ export function reduce(state: RoomState, message: ClientMessage): RoomState {
   }
 
   if (message.type === "deleteSlide") {
-    if (next.deck.slides.length <= 1) return state;
+    const target = next.deck.slides.find((slide) => slide.id === message.slideId);
+    if (!target || target.kind === "attendance" || next.deck.slides.length <= 1) return state;
     const previous = watchingId(next);
     const previousIndex = next.index;
     const before = next.deck.slides.length;
@@ -321,9 +325,13 @@ export function reduce(state: RoomState, message: ClientMessage): RoomState {
 
   const from = next.deck.slides.findIndex((item) => item.id === message.slideId);
   if (from === -1 || from === message.toIndex || !Number.isInteger(message.toIndex)) return state;
+  const moving = next.deck.slides[from];
+  if (moving.kind === "attendance") return state;
   const previous = watchingId(next);
   const [moved] = next.deck.slides.splice(from, 1);
-  const dest = Math.min(next.deck.slides.length, Math.max(0, message.toIndex));
+  const first = next.deck.slides[0];
+  const minimum = first?.kind === "attendance" ? 1 : 0;
+  const dest = Math.min(next.deck.slides.length, Math.max(minimum, message.toIndex));
   next.deck.slides.splice(dest, 0, moved);
   restoreWatching(next, previous, next.index);
   return next;
@@ -343,7 +351,7 @@ export function sanitizeSlides(list: unknown): Slide[] {
     seen.add(slide.id);
     slides.push(slide);
   }
-  return slides;
+  return ensureAttendanceSlide(slides);
 }
 
 export function sanitizeTitle(value: unknown): string {

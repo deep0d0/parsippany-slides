@@ -15,6 +15,7 @@ import { dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
 import seedJson from "../src/data/deck.json";
+import { ensureAttendanceSlide } from "../src/shared/attendance";
 import { reduce, sanitizeSeconds, sanitizeSlides, sanitizeTitle } from "../src/shared/reduce";
 import { TelegramError, TelegramService } from "./telegram";
 import {
@@ -107,7 +108,7 @@ type OpenBody = {
 function initialState(fileId: string): RoomState {
   return {
     fileId,
-    deck: { ...seed, id: fileId },
+    deck: { ...seed, id: fileId, slides: ensureAttendanceSlide(seed.slides) },
     index: 0,
     hold: false,
     autoplay: false,
@@ -466,7 +467,7 @@ class Room {
       }
       return {
         fileId: typeof stored.fileId === "string" && stored.fileId ? stored.fileId : stored.deck.id || seed.id,
-        deck: stored.deck,
+        deck: { ...stored.deck, slides: ensureAttendanceSlide(stored.deck.slides) },
         index: Number.isInteger(stored.index) ? (stored.index as number) : 0,
         hold: Boolean(stored.hold),
         autoplay: Boolean(stored.autoplay),
