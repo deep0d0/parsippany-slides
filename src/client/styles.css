@@ -817,6 +817,9 @@ button:disabled { cursor: default; }
   overflow: hidden;
 }
 
+/* Text can overhang its frame for descenders without being clipped. */
+.line:not(.is-image) { overflow: visible; }
+
 .slide.is-editable .line { cursor: move; }
 .slide.is-editable .line.is-locked { cursor: default; }
 .slide.is-editable .line.is-position-locked { cursor: text; }
@@ -827,7 +830,7 @@ button:disabled { cursor: default; }
 .line-text {
   width: 100%;
   max-height: 100%;
-  overflow: hidden;
+  overflow: visible;
   line-height: 1.02;
   font-weight: 400;
   white-space: pre-wrap;
