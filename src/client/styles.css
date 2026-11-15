@@ -513,6 +513,21 @@ button:disabled { cursor: default; }
   font-size: 11px;
 }
 
+.image-tint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.image-tint .tool {
+  min-height: 30px;
+  padding: 0 8px;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
 .image-slider {
   display: grid;
   grid-template-columns: 64px minmax(0, 1fr) 40px;

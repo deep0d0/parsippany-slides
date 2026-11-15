@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
-import { SLIDE_POINTS, isImageBox, type TextBox } from "../shared/types";
+import { SLIDE_POINTS, imageTintFilter, isImageBox, type TextBox } from "../shared/types";
 import type { Slide } from "../shared/types";
 
 type Stage = { w: number; h: number };
@@ -67,7 +67,14 @@ export function SlideView({
       }
     >
       {slide.background ? (
-        <img className="slide-art" src={slide.background} alt="" draggable={false} decoding="async" />
+        <img
+          className="slide-art"
+          src={slide.background}
+          alt=""
+          draggable={false}
+          decoding="async"
+          style={{ filter: imageTintFilter(slide.backgroundTint) }}
+        />
       ) : null}
       {stage.h > 0
         ? slide.boxes.map((box) => {
@@ -227,7 +234,7 @@ function Line({
           className="line-art"
           role="img"
           aria-label={box.name}
-          style={{ ...imageStyle(box, stage), opacity: box.opacity ?? 1 }}
+          style={{ ...imageStyle(box, stage), opacity: box.opacity ?? 1, filter: imageTintFilter(box.tint) }}
         />
       ) : (
         <div

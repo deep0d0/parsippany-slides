@@ -9,6 +9,7 @@ export const MIN_ADVANCE_SECONDS = 1;
 export const MAX_ADVANCE_SECONDS = 600;
 export const MAX_MEDIA_BYTES = 20_000_000;
 export type ImageFit = "cover" | "contain";
+export type ImageTint = "white" | "black";
 
 export const FONT_FAMILIES = [
   "Visby CF Thin",
@@ -44,6 +45,8 @@ export type TextBox = {
   locked?: boolean;
   src?: string;
   fit?: ImageFit;
+  /** Image-only: render the artwork as a solid white or black silhouette. */
+  tint?: ImageTint;
   aspect?: number;
   /** Image-only: clockwise rotation in degrees. */
   rotation?: number;
@@ -88,7 +91,7 @@ export type BoxPatch = Partial<
     | "padBottom"
     | "padLeft"
   >
->;
+> & { tint?: ImageTint | null };
 
 export type Slide = {
   id: string;
@@ -98,6 +101,8 @@ export type Slide = {
   background: string | null;
   /** Solid fill behind the background image, as #RRGGBB. */
   backgroundColor?: string;
+  /** Render an SVG background as a solid silhouette. */
+  backgroundTint?: ImageTint;
   /** Paint order, bottom to top. The layers panel edits this order. */
   boxes: TextBox[];
   /** Seconds this slide stays up during autoplay. Missing means the deck default. */
@@ -159,6 +164,16 @@ export function isMediaUrl(value: string): boolean {
 
 export function isImageBox(box: TextBox): box is TextBox & { kind: "image"; src: string; fit: ImageFit } {
   return box.kind === "image" && typeof box.src === "string" && isMediaUrl(box.src);
+}
+
+export function isSvgBox(box: TextBox): boolean {
+  return isImageBox(box) && /\.svg(?:[?#]|$)/i.test(box.src);
+}
+
+export function imageTintFilter(tint: ImageTint | undefined): string | undefined {
+  if (tint === "white") return "brightness(0) invert(1)";
+  if (tint === "black") return "brightness(0)";
+  return undefined;
 }
 
 export type ClientMessage =

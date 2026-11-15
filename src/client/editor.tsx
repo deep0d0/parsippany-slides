@@ -10,6 +10,7 @@ import {
   MAX_ADVANCE_SECONDS,
   MIN_ADVANCE_SECONDS,
   isImageBox,
+  isSvgBox,
   isSponsorSlide,
   slideLabel,
   visibleSlides,
@@ -297,6 +298,7 @@ export function Editor() {
       created.cropRight = source.cropRight;
       created.cropBottom = source.cropBottom;
       created.cropLeft = source.cropLeft;
+      created.tint = source.tint;
     }
     send({ type: "addBox", slideId: slide.id, box: created });
     setSelectedIds([created.id]);
@@ -322,7 +324,12 @@ export function Editor() {
     applySlides(
       state.deck.slides.map((item) =>
         item.id === slide.id
-          ? { ...item, background: source.src, boxes: item.boxes.filter((candidate) => candidate.id !== source.id) }
+          ? {
+              ...item,
+              background: source.src,
+              backgroundTint: source.tint,
+              boxes: item.boxes.filter((candidate) => candidate.id !== source.id),
+            }
           : item,
       ),
     );
@@ -332,7 +339,9 @@ export function Editor() {
   const clearBackground = (slideId: string) => {
     const target = state.deck.slides.find((item) => item.id === slideId);
     if (!target?.background) return;
-    applySlides(state.deck.slides.map((item) => (item.id === slideId ? { ...item, background: null } : item)));
+    applySlides(
+      state.deck.slides.map((item) => (item.id === slideId ? { ...item, background: null, backgroundTint: undefined } : item)),
+    );
   };
   const pickImage = async (file: File) => {
     setImageBusy("Saving the image");
@@ -801,6 +810,38 @@ export function Editor() {
                       </button>
                     </div>
                   </div>
+                  {isSvgBox(box) ? (
+                    <div className="image-tint" role="group" aria-label="SVG color">
+                      <span>SVG color</span>
+                      <button
+                        type="button"
+                        className={!box.tint ? "tool is-on" : "tool"}
+                        aria-pressed={!box.tint}
+                        disabled={Boolean(box.locked)}
+                        onClick={() => patchImage({ tint: null })}
+                      >
+                        Original
+                      </button>
+                      <button
+                        type="button"
+                        className={box.tint === "white" ? "tool is-on" : "tool"}
+                        aria-pressed={box.tint === "white"}
+                        disabled={Boolean(box.locked)}
+                        onClick={() => patchImage({ tint: "white" })}
+                      >
+                        White
+                      </button>
+                      <button
+                        type="button"
+                        className={box.tint === "black" ? "tool is-on" : "tool"}
+                        aria-pressed={box.tint === "black"}
+                        disabled={Boolean(box.locked)}
+                        onClick={() => patchImage({ tint: "black" })}
+                      >
+                        Black
+                      </button>
+                    </div>
+                  ) : null}
                   <label className="image-slider">
                     <span>Rotation</span>
                     <input

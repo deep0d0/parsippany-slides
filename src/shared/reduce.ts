@@ -92,6 +92,8 @@ function sanitizeBox(box: TextBox): TextBox | null {
     cleaned.kind = "image";
     cleaned.src = box.src;
     cleaned.fit = box.fit === "contain" ? "contain" : "cover";
+    if (box.tint === "white" || box.tint === "black") cleaned.tint = box.tint;
+    else delete cleaned.tint;
     cleaned.aspect = clampUnit(typeof box.aspect === "number" ? box.aspect : 16 / 9, 0.1, 10);
     cleaned.rotation = normalizeRotation(box.rotation);
     cleaned.flipX = Boolean(box.flipX);
@@ -111,6 +113,7 @@ function sanitizeBox(box: TextBox): TextBox | null {
   delete cleaned.kind;
   delete cleaned.src;
   delete cleaned.fit;
+  delete cleaned.tint;
   delete cleaned.aspect;
   delete cleaned.rotation;
   delete cleaned.flipX;
@@ -135,6 +138,9 @@ function sanitizeSlide(slide: Slide): Slide | null {
   };
   if (typeof slide.backgroundColor === "string" && /^#[0-9a-fA-F]{6}$/.test(slide.backgroundColor)) {
     cleaned.backgroundColor = slide.backgroundColor;
+  }
+  if (slide.backgroundTint === "white" || slide.backgroundTint === "black") {
+    cleaned.backgroundTint = slide.backgroundTint;
   }
   const seconds = sanitizeSeconds(slide.advanceSeconds);
   if (seconds !== null) cleaned.advanceSeconds = seconds;
@@ -161,6 +167,8 @@ function applyPatch(box: TextBox, patch: BoxPatch) {
   if (typeof patch.padLeft === "number") box.padLeft = clampUnit(patch.padLeft, 0, 0.2);
   if (box.kind === "image") {
     if (patch.fit === "cover" || patch.fit === "contain") box.fit = patch.fit;
+    if (patch.tint === null) delete box.tint;
+    else if (patch.tint === "white" || patch.tint === "black") box.tint = patch.tint;
     if (typeof patch.rotation === "number" && Number.isFinite(patch.rotation)) {
       box.rotation = normalizeRotation(patch.rotation);
     }
