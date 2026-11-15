@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
-import { isImageBox, type TextBox } from "../shared/types";
+import { SLIDE_POINTS, isImageBox, type TextBox } from "../shared/types";
 import type { Slide } from "../shared/types";
 
 type Stage = { w: number; h: number };
 type Frame = Pick<TextBox, "x" | "y" | "w" | "h">;
+type FramePatch = Frame & { fontSize?: number };
 type Handle = "n" | "s" | "e" | "w" | "nw" | "ne" | "sw" | "se";
 
 const HANDLES: Handle[] = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
@@ -26,12 +27,12 @@ export function SlideView({
   onSelect?: (boxId: string, shift?: boolean) => void;
   onEdit?: (boxId: string | null) => void;
   onText?: (boxId: string, text: string) => void;
-  onFrame?: (boxId: string, frame: Frame) => void;
+  onFrame?: (boxId: string, patch: FramePatch) => void;
   onContextMenu?: (boxId: string, x: number, y: number) => void;
 }) {
   const frameRef = useRef<HTMLDivElement>(null);
   const [stage, setStage] = useState<Stage>({ w: 0, h: 0 });
-  const [draft, setDraft] = useState<{ id: string; frame: Frame } | null>(null);
+  const [draft, setDraft] = useState<{ id: string; patch: FramePatch } | null>(null);
 
   useEffect(() => {
     const element = frameRef.current;
@@ -69,8 +70,8 @@ export function SlideView({
         <img className="slide-art" src={slide.background} alt="" draggable={false} decoding="async" />
       ) : null}
       {stage.h > 0
-        ? orderedBoxes(slide.boxes).map((box) => {
-            const shown = draft?.id === box.id ? { ...box, ...draft.frame } : box;
+        ? slide.boxes.map((box) => {
+            const shown = draft?.id === box.id ? { ...box, ...draft.patch } : box;
             return (
               <Line
                 key={box.id}
@@ -84,10 +85,10 @@ export function SlideView({
                 onEdit={onEdit}
                 onText={onText}
                 onContextMenu={onContextMenu}
-                onDraft={(frame) => setDraft({ id: box.id, frame })}
-                onCommit={(frame) => {
+                onDraft={(patch) => setDraft({ id: box.id, patch })}
+                onCommit={(patch) => {
                   setDraft(null);
-                  onFrame?.(box.id, frame);
+                  onFrame?.(box.id, patch);
                 }}
               />
             );
@@ -121,8 +122,8 @@ function Line({
   onEdit?: (boxId: string | null) => void;
   onText?: (boxId: string, text: string) => void;
   onContextMenu?: (boxId: string, x: number, y: number) => void;
-  onDraft: (frame: Frame) => void;
-  onCommit: (frame: Frame) => void;
+  onDraft: (patch: FramePatch) => void;
+  onCommit: (patch: FramePatch) => void;
 }) {
   const textRef = useRef<HTMLDivElement>(null);
   const image = isImageBox(box);
@@ -175,7 +176,8 @@ function Line({
         localDx = (pixelX * cos - pixelY * sin) / stage.w;
         localDy = (pixelX * sin + pixelY * cos) / stage.h;
       }
-      latest = handle ? resize(start.frame, handle, localDx, localDy) : move(start.frame, dx, dy);
+      const frame = handle ? resize(start.frame, handle, localDx, localDy) : move(start.frame, dx, dy);
+      latest = textScalePatch(start.frame, frame, handle, box);
       onDraft(latest);
     };
     const onUp = () => {
@@ -262,9 +264,6 @@ function Line({
   );
 }
 
-function orderedBoxes(boxes: TextBox[]): TextBox[] {
-  return [...boxes.filter(isImageBox), ...boxes.filter((box) => !isImageBox(box))];
-}
 
 /** Map the current frame, fit, and source crop to a CSS background cover. */
 function imageStyle(box: TextBox, stage: Stage): CSSProperties {
@@ -297,6 +296,23 @@ function imageStyle(box: TextBox, stage: Stage): CSSProperties {
     backgroundSize: `${imageW}px ${imageH}px`,
     backgroundPosition: `${(frameW - regionW) / 2 - left * imageW}px ${(frameH - regionH) / 2 - top * imageH}px`,
     backgroundRepeat: "no-repeat",
+  };
+}
+
+/** Scale a text box's font with the dimension being resized, keeping images unchanged. */
+function textScalePatch(start: Frame, frame: Frame, handle: Handle | undefined, box: TextBox): FramePatch {
+  if (!handle || isImageBox(box)) return frame;
+  const horizontal = handle.includes("e") || handle.includes("w");
+  const vertical = handle.includes("n") || handle.includes("s");
+  const scale = horizontal && vertical
+    ? Math.min(frame.w / start.w, frame.h / start.h)
+    : horizontal
+      ? frame.w / start.w
+      : frame.h / start.h;
+  if (!Number.isFinite(scale) || scale <= 0) return frame;
+  return {
+    ...frame,
+    fontSize: Math.min(1, Math.max(8 / SLIDE_POINTS, box.fontSize * scale)),
   };
 }
 

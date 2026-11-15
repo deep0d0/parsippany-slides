@@ -2,6 +2,7 @@ import JSZip from "jszip";
 import type { PptxRenderer } from "pptx-browser";
 import { FONT_FAMILIES, type Slide, type TextAlign, type TextAnchor, type TextBox } from "../shared/types";
 import { imageBox } from "./ids";
+import { svgAspect } from "./media";
 
 const A = "http://schemas.openxmlformats.org/drawingml/2006/main";
 const P = "http://schemas.openxmlformats.org/presentationml/2006/main";
@@ -31,6 +32,7 @@ const MIME: Record<string, string> = {
   jpeg: "image/jpeg",
   gif: "image/gif",
   webp: "image/webp",
+  svg: "image/svg+xml",
 };
 
 export type PptxMedia = { name: string; mime: string; bytes: Uint8Array };
@@ -570,6 +572,10 @@ function pictureUnsupported(node: Element, blip: Element | undefined): boolean {
 }
 
 async function imageAspect(bytes: Uint8Array, mime: string): Promise<number> {
+  if (mime === "image/svg+xml") {
+    const aspect = svgAspect(bytes);
+    if (aspect !== null) return Math.min(10, Math.max(0.1, aspect));
+  }
   const data = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
   const url = URL.createObjectURL(new Blob([data], { type: mime }));
   try {

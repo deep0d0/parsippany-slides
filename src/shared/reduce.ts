@@ -225,6 +225,19 @@ export function reduce(state: RoomState, message: ClientMessage): RoomState {
     return slide.boxes.length === before ? state : next;
   }
 
+  if (message.type === "reorderBox") {
+    const slide = next.deck.slides.find((item) => item.id === message.slideId);
+    const from = slide?.boxes.findIndex((item) => item.id === message.boxId) ?? -1;
+    if (!slide || from === -1 || !Number.isInteger(message.toIndex)) return state;
+    const moving = slide.boxes[from];
+    if (moving.locked) return state;
+    const [box] = slide.boxes.splice(from, 1);
+    const to = Math.min(slide.boxes.length, Math.max(0, message.toIndex));
+    if (to === from) return state;
+    slide.boxes.splice(to, 0, box);
+    return next;
+  }
+
   if (message.type === "index") {
     next.index = clampIndex(next.deck, message.index);
     if (next.hold) next.heldIndex = next.index;

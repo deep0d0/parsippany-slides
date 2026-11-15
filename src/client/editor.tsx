@@ -25,6 +25,7 @@ import { ContextMenu, type MenuItem } from "./context-menu";
 import { FileMenu } from "./file-menu";
 import { FormatBar } from "./format-bar";
 import { useDeckHistory } from "./history";
+import { LayersPanel } from "./layers";
 import { duplicateSlide, imageBox, nativeImageFrame, newId, textBox } from "./ids";
 import { saveImage } from "./media";
 import { SlideView } from "./slide-view";
@@ -202,6 +203,18 @@ export function Editor() {
   const onScreenId = screen[screenIndex]?.id;
   const visibleIndex = slide ? visibleSlides(state.deck).findIndex((item) => item.id === slide.id) : -1;
   const origin = window.location.origin;
+  const selectBox = (boxId: string, shift = false) => {
+    if (!boxId) {
+      setSelectedIds([]);
+      setEditingId(null);
+      return;
+    }
+    setSelectedIds((current) => {
+      if (!shift) return [boxId];
+      return current.includes(boxId) ? current.filter((item) => item !== boxId) : [...current, boxId];
+    });
+    if (!shift && boxId !== editingId) setEditingId(null);
+  };
   const patchBox = (patch: BoxPatch) => {
     for (const item of slide.boxes) {
       if (!selectedIds.includes(item.id) || item.locked) continue;
@@ -529,7 +542,7 @@ export function Editor() {
         type="file"
         tabIndex={-1}
         aria-hidden="true"
-        accept="image/png,image/jpeg,image/webp,image/gif,.png,.jpg,.jpeg,.webp,.gif"
+        accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,.png,.jpg,.jpeg,.webp,.gif,.svg"
         onChange={(event) => {
           const file = event.currentTarget.files?.[0];
           if (file) void pickImage(file);
@@ -614,18 +627,7 @@ export function Editor() {
                 editable
                 selectedIds={selectedIds}
                 editingId={editingId}
-                onSelect={(id, shift) => {
-                  if (!id) {
-                    setSelectedIds([]);
-                    setEditingId(null);
-                    return;
-                  }
-                  setSelectedIds((current) => {
-                    if (!shift) return [id];
-                    return current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
-                  });
-                  if (!shift && id !== editingId) setEditingId(null);
-                }}
+                onSelect={selectBox}
                 onContextMenu={(boxId, x, y) => {
                   if (!boxId) {
                     setMenu({ kind: "slide", slideId: slide.id, x, y });
@@ -654,6 +656,15 @@ export function Editor() {
               {slide.boxes.some((item) => !isImageBox(item) && item.text.trim()) ? (
                 <h2>{slide.boxes.map((item) => (isImageBox(item) ? "" : item.text.trim())).find(Boolean)?.split("\n")[0]}</h2>
               ) : null}
+
+              <LayersPanel
+                boxes={slide.boxes}
+                selectedIds={selectedIds}
+                onSelect={selectBox}
+                onReorder={(boxId, toIndex) =>
+                  send({ type: "reorderBox", slideId: slide.id, boxId, toIndex })
+                }
+              />
 
               <button
                 type="button"

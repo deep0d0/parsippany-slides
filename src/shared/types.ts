@@ -98,6 +98,7 @@ export type Slide = {
   background: string | null;
   /** Solid fill behind the background image, as #RRGGBB. */
   backgroundColor?: string;
+  /** Paint order, bottom to top. The layers panel edits this order. */
   boxes: TextBox[];
   /** Seconds this slide stays up during autoplay. Missing means the deck default. */
   advanceSeconds?: number;
@@ -169,6 +170,7 @@ export type ClientMessage =
   | { type: "deleteSlide"; slideId: string }
   | { type: "moveSlide"; slideId: string; toIndex: number }
   | { type: "addBox"; slideId: string; box: TextBox }
+  | { type: "reorderBox"; slideId: string; boxId: string; toIndex: number }
   | { type: "deleteBox"; slideId: string; boxId: string }
   | { type: "updateBox"; slideId: string; boxId: string; patch: BoxPatch }
   | { type: "autoplay"; autoplay: boolean }
@@ -190,6 +192,7 @@ const MESSAGE_TYPES = new Set<ClientMessage["type"]>([
   "deleteSlide",
   "moveSlide",
   "addBox",
+  "reorderBox",
   "deleteBox",
   "updateBox",
   "setDeck",
