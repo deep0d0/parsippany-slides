@@ -659,7 +659,6 @@ export function Editor() {
                   note={attendanceNote}
                   error={attendanceError}
                   onUpload={() => attendancePickerRef.current?.click()}
-                  onText={(boxId, text) => send({ type: "text", slideId: slide.id, boxId, text })}
                 />
               ) : null}
 
