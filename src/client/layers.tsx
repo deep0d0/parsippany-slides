@@ -104,7 +104,7 @@ export function LayersPanel({ boxes, selectedIds, onSelect, onReorder }: LayersP
                     className="layer-row-button"
                     draggable={!box.locked}
                     aria-current={selected ? "true" : undefined}
-                    aria-label={`Layer ${index + 1}: ${name}${box.locked ? ", locked" : ""}`}
+                    aria-label={`Layer ${index + 1}: ${name}${box.locked ? ", locked" : box.positionLocked ? ", position locked" : ""}`}
                     onClick={(event) => onSelect(box.id, event.shiftKey)}
                   >
                     <span className="layer-grip" aria-hidden="true">
@@ -117,6 +117,10 @@ export function LayersPanel({ boxes, selectedIds, onSelect, onReorder }: LayersP
                     {box.locked ? (
                       <span className="layer-lock" title="Locked" aria-label="Locked">
                         <LockIcon />
+                      </span>
+                    ) : box.positionLocked ? (
+                      <span className="layer-position-lock" title="Position locked" aria-label="Position locked">
+                        <PositionLockIcon />
                       </span>
                     ) : null}
                   </button>
@@ -145,6 +149,15 @@ function ImageIcon() {
     <svg width="13" height="13" viewBox="0 0 13 13" aria-hidden="true">
       <rect x="1.5" y="2" width="10" height="9" rx="1.5" fill="none" stroke="currentColor" />
       <path d="m2.5 9 2.6-3 2 2.2 1.2-1.3 2.2 2.6" fill="none" stroke="currentColor" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function PositionLockIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+      <path d="M6 10.8S9.5 7.6 9.5 4.9a3.5 3.5 0 0 0-7 0C2.5 7.6 6 10.8 6 10.8Z" fill="none" stroke="currentColor" />
+      <circle cx="6" cy="4.8" r="1.2" fill="currentColor" />
     </svg>
   );
 }

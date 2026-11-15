@@ -43,6 +43,8 @@ export type TextBox = {
   kind?: "text" | "image";
   /** Prevent edits, movement, resizing, and deletion from the editor. */
   locked?: boolean;
+  /** Prevent movement and resizing while leaving content editable. */
+  positionLocked?: boolean;
   src?: string;
   fit?: ImageFit;
   /** Image-only: render the artwork as a solid white or black silhouette. */
@@ -77,6 +79,7 @@ export type BoxPatch = Partial<
     | "anchor"
     | "italic"
     | "locked"
+    | "positionLocked"
     | "fit"
     | "rotation"
     | "flipX"

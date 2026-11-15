@@ -227,13 +227,17 @@ export function Editor() {
     send({ type: "updateBox", slideId: slide.id, boxId: box.id, patch });
   };
   const align = (edge: AlignEdge, target: AlignTarget) => {
-    const chosen = slide.boxes.filter((item) => selectedIds.includes(item.id) && !item.locked);
+    const chosen = slide.boxes.filter(
+      (item) => selectedIds.includes(item.id) && !item.locked && !item.positionLocked,
+    );
     for (const frame of alignFrames(chosen, target, edge)) {
       send({ type: "updateBox", slideId: slide.id, boxId: frame.id, patch: { x: frame.x, y: frame.y } });
     }
   };
   const distribute = (axis: DistributeAxis, target: AlignTarget) => {
-    const chosen = slide.boxes.filter((item) => selectedIds.includes(item.id) && !item.locked);
+    const chosen = slide.boxes.filter(
+      (item) => selectedIds.includes(item.id) && !item.locked && !item.positionLocked,
+    );
     for (const frame of distributeFrames(chosen, target, axis)) {
       send({ type: "updateBox", slideId: slide.id, boxId: frame.id, patch: { x: frame.x, y: frame.y } });
     }
@@ -242,7 +246,9 @@ export function Editor() {
     const stage = document.querySelector(".canvas .slide");
     if (!stage) return;
     const size = { w: stage.clientWidth, h: stage.clientHeight };
-    const chosen = slide.boxes.filter((item) => selectedIds.includes(item.id) && !item.locked);
+    const chosen = slide.boxes.filter(
+      (item) => selectedIds.includes(item.id) && !item.locked && !item.positionLocked,
+    );
     const patches: Array<{ boxId: string; patch: BoxPatch }> = [];
     for (const item of chosen) {
       const patch = await fitBox(item, size, mode);
@@ -278,6 +284,8 @@ export function Editor() {
   const copyBox = (source: TextBox) => {
     if (source.locked) return;
     const { id: _ignored, ...rest } = source;
+    delete rest.locked;
+    delete rest.positionLocked;
     const created = isImageBox(source)
       ? imageBox(source.src, source.aspect ?? 16 / 9, source.fit)
       : textBox({
@@ -313,7 +321,9 @@ export function Editor() {
     setPendingImage(null);
   };
   const applyImageFit = (fit: ImageFit) => {
-    const chosen = slide.boxes.filter((item) => selectedIds.includes(item.id) && isImageBox(item) && !item.locked);
+    const chosen = slide.boxes.filter(
+      (item) => selectedIds.includes(item.id) && isImageBox(item) && !item.locked && !item.positionLocked,
+    );
     for (const item of chosen) {
       const frame = fit === "cover" ? { x: 0, y: 0, w: 1, h: 1 } : nativeImageFrame(item.aspect ?? 16 / 9);
       send({ type: "updateBox", slideId: slide.id, boxId: item.id, patch: { fit, ...frame } });
@@ -423,9 +433,24 @@ export function Editor() {
     const selectedBoxes = slide.boxes.filter((item) => ids.includes(item.id));
     const anyLocked = selectedBoxes.some((item) => item.locked);
     const allLocked = selectedBoxes.length > 0 && selectedBoxes.every((item) => item.locked);
+    const allPositionLocked =
+      selectedBoxes.length > 0 && selectedBoxes.every((item) => item.positionLocked);
+    const anyFrameLocked = anyLocked || selectedBoxes.some((item) => item.positionLocked);
     const image = target && isImageBox(target);
     return [
       { label: "Duplicate", disabled: !target || anyLocked, onSelect: () => target && copyBox(target) },
+      {
+        label: allPositionLocked ? "Unlock position" : "Lock position",
+        disabled: selectedBoxes.length === 0 || anyLocked,
+        onSelect: () => {
+          const positionLocked = !allPositionLocked;
+          for (const item of selectedBoxes) {
+            if (item.positionLocked !== positionLocked) {
+              send({ type: "updateBox", slideId: slide.id, boxId: item.id, patch: { positionLocked } });
+            }
+          }
+        },
+      },
       {
         label: allLocked ? "Unlock object" : "Lock object",
         disabled: selectedBoxes.length === 0,
@@ -440,8 +465,8 @@ export function Editor() {
       },
       ...(image
         ? [
-            { label: "Scale to slide", disabled: anyLocked, onSelect: () => applyImageFit("cover") },
-            { label: "Keep proportions", disabled: anyLocked, onSelect: () => applyImageFit("contain") },
+            { label: "Scale to slide", disabled: anyFrameLocked, onSelect: () => applyImageFit("cover") },
+            { label: "Keep proportions", disabled: anyFrameLocked, onSelect: () => applyImageFit("contain") },
             { label: "Set as background", disabled: anyLocked, onSelect: () => target && useAsBackground(target) },
           ]
         : []),
@@ -730,6 +755,22 @@ export function Editor() {
                 <div className="object-lock">
                   <button
                     type="button"
+                    className={box.positionLocked ? "tool is-on" : "tool"}
+                    aria-pressed={Boolean(box.positionLocked)}
+                    disabled={Boolean(box.locked)}
+                    onClick={() =>
+                      send({
+                        type: "updateBox",
+                        slideId: slide.id,
+                        boxId: box.id,
+                        patch: { positionLocked: !box.positionLocked },
+                      })
+                    }
+                  >
+                    {box.positionLocked ? "Unlock position" : "Lock position"}
+                  </button>
+                  <button
+                    type="button"
                     className={box.locked ? "tool is-on" : "tool"}
                     aria-pressed={Boolean(box.locked)}
                     onClick={() =>
@@ -744,7 +785,13 @@ export function Editor() {
                     {box.locked ? "Unlock object" : "Lock object"}
                   </button>
                   <span className="hint">
-                    {box.locked ? "Position and content are protected." : "Prevent accidental changes."}
+                    {box.locked
+                      ? "Position and content are protected."
+                      : box.positionLocked
+                        ? isImageBox(box)
+                          ? "Position is locked. Adjust the image here."
+                          : "Position is locked. Double-click the text to edit."
+                        : "Prevent accidental changes."}
                   </span>
                 </div>
               ) : null}

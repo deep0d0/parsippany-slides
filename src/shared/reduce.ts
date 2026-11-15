@@ -85,8 +85,14 @@ function sanitizeBox(box: TextBox): TextBox | null {
     padBottom: clampUnit(box.padBottom ?? 0, 0, 0.2),
     padLeft: clampUnit(box.padLeft ?? 0, 0, 0.2),
   };
-  if (box.locked === true) cleaned.locked = true;
-  else delete cleaned.locked;
+  if (box.locked === true) {
+    cleaned.locked = true;
+    delete cleaned.positionLocked;
+  } else {
+    delete cleaned.locked;
+    if (box.positionLocked === true) cleaned.positionLocked = true;
+    else delete cleaned.positionLocked;
+  }
   if (box.kind === "image") {
     if (typeof box.src !== "string" || !isMediaUrl(box.src)) return null;
     cleaned.kind = "image";
@@ -160,7 +166,14 @@ function applyPatch(box: TextBox, patch: BoxPatch) {
   if (patch.align === "left" || patch.align === "center" || patch.align === "right") box.align = patch.align;
   if (patch.anchor === "start" || patch.anchor === "center" || patch.anchor === "end") box.anchor = patch.anchor;
   if (typeof patch.italic === "boolean") box.italic = patch.italic;
-  if (typeof patch.locked === "boolean") box.locked = patch.locked;
+  if (typeof patch.locked === "boolean") {
+    box.locked = patch.locked;
+    if (patch.locked) delete box.positionLocked;
+  }
+  if (typeof patch.positionLocked === "boolean") {
+    if (!box.locked && patch.positionLocked) box.positionLocked = true;
+    else delete box.positionLocked;
+  }
   if (typeof patch.padTop === "number") box.padTop = clampUnit(patch.padTop, 0, 0.2);
   if (typeof patch.padRight === "number") box.padRight = clampUnit(patch.padRight, 0, 0.2);
   if (typeof patch.padBottom === "number") box.padBottom = clampUnit(patch.padBottom, 0, 0.2);
@@ -210,6 +223,12 @@ export function reduce(state: RoomState, message: ClientMessage): RoomState {
     const box = findBox(next, message.slideId, message.boxId);
     if (!box || !message.patch) return state;
     if (box.locked && Object.keys(message.patch).some((key) => key !== "locked")) return state;
+    if (
+      box.positionLocked &&
+      ["x", "y", "w", "h"].some((key) => key in message.patch)
+    ) {
+      return state;
+    }
     applyPatch(box, message.patch);
     return next;
   }

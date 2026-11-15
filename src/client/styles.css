@@ -508,6 +508,12 @@ button:disabled { cursor: default; }
   color: var(--brass);
 }
 
+.layer-position-lock {
+  display: flex;
+  flex: none;
+  color: var(--muted);
+}
+
 .layers-hint {
   margin: 0;
   font-size: 11px;
@@ -813,6 +819,8 @@ button:disabled { cursor: default; }
 
 .slide.is-editable .line { cursor: move; }
 .slide.is-editable .line.is-locked { cursor: default; }
+.slide.is-editable .line.is-position-locked { cursor: text; }
+.slide.is-editable .line.is-position-locked.is-image { cursor: default; }
 
 .line.is-selected { overflow: visible; }
 

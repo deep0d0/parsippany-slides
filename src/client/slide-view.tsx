@@ -86,7 +86,7 @@ export function SlideView({
                 stage={stage}
                 editable={editable}
                 selected={selectedIds.includes(box.id)}
-                handles={selectedIds[selectedIds.length - 1] === box.id && !box.locked}
+                handles={selectedIds[selectedIds.length - 1] === box.id && !box.locked && !box.positionLocked}
                 editing={editingId === box.id && !isImageBox(box) && !box.locked}
                 onSelect={onSelect}
                 onEdit={onEdit}
@@ -155,7 +155,7 @@ function Line({
     if (!editable) return;
     event.stopPropagation();
     onSelect?.(box.id, event.shiftKey);
-    if (box.locked) return;
+    if (box.locked || box.positionLocked) return;
     if (handle || image) onEdit?.(null);
     else if (editing) return;
 
@@ -198,7 +198,7 @@ function Line({
 
   return (
     <div
-      className={["line", image ? "is-image" : "", selected ? "is-selected" : "", editing ? "is-editing" : "", empty ? "is-empty" : "", box.locked ? "is-locked" : ""]
+      className={["line", image ? "is-image" : "", selected ? "is-selected" : "", editing ? "is-editing" : "", empty ? "is-empty" : "", box.locked ? "is-locked" : "", box.positionLocked ? "is-position-locked" : ""]
         .filter(Boolean)
         .join(" ")}
       style={{
