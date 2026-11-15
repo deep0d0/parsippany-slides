@@ -91,6 +91,8 @@ export type Slide = {
   id: string;
   hidden: boolean;
   background: string | null;
+  /** Solid fill behind the background image, as #RRGGBB. */
+  backgroundColor?: string;
   boxes: TextBox[];
   /** Seconds this slide stays up during autoplay. Missing means the deck default. */
   advanceSeconds?: number;

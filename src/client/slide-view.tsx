@@ -47,6 +47,7 @@ export function SlideView({
     <div
       className={editable ? "slide is-editable" : "slide"}
       ref={frameRef}
+      style={slide.backgroundColor ? { backgroundColor: slide.backgroundColor } : undefined}
       onPointerDown={
         editable
           ? () => {

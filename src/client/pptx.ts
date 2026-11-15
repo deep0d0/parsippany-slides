@@ -42,6 +42,8 @@ export type ImportedPptx = {
   media: PptxMedia[];
 };
 
+type Theme = { colors: Record<string, string> };
+
 type StoredPicture = {
   name: string;
   label: string;
@@ -67,6 +69,7 @@ export async function importPptx(file: File): Promise<ImportedPptx> {
   if (sw < 1 || sh < 1) throw new Error("This PowerPoint file has an invalid slide size.");
   const slidePoints = sh / EMU_PER_PT;
   const clrMap = await colorMap(zip);
+  const theme = await themeOf(zip);
   const order = await slideOrder(zip, presentation);
   if (order.length === 0) throw new Error("This PowerPoint file has no slides.");
 
@@ -80,6 +83,7 @@ export async function importPptx(file: File): Promise<ImportedPptx> {
     const root = parse(await read(zip, path)).documentElement;
     const rels = await relationships(zip, relsPath(path));
     const tree = first(root, P, "spTree");
+    const backgroundColor = await slideBackgroundColor(zip, root, path, clrMap, theme);
     let background: string | null = null;
     let needsRaster = false;
     const boxes: TextBox[] = [];
@@ -139,7 +143,7 @@ export async function importPptx(file: File): Promise<ImportedPptx> {
             continue;
           }
           if (textShapeUnsupported(child)) needsRaster = true;
-          const box = textBox(child, frame, index + 1, slidePoints, sw, sh, clrMap);
+          const box = textBox(child, frame, index + 1, slidePoints, sw, sh, clrMap, theme);
           if (box) boxes.push(box);
         } else {
           needsRaster = true;
@@ -148,12 +152,14 @@ export async function importPptx(file: File): Promise<ImportedPptx> {
     }
 
     if (needsRaster) unsupported.add(index);
-    slides.push({
+    const slide: Slide = {
       id: `s${index + 1}`,
       hidden: root.getAttribute("show") === "0",
       background,
       boxes,
-    });
+    };
+    if (backgroundColor) slide.backgroundColor = backgroundColor;
+    slides.push(slide);
   }
 
   if (slides.length === 0) throw new Error("No slides could be read from this file.");
@@ -193,6 +199,120 @@ async function colorMap(zip: JSZip): Promise<Record<string, string>> {
   const map: Record<string, string> = {};
   for (const attr of master.attributes) map[attr.name] = attr.value;
   return map;
+}
+
+async function themeOf(zip: JSZip): Promise<Theme> {
+  const path = Object.keys(zip.files)
+    .filter((name) => /^ppt\/theme\/theme\d+\.xml$/.test(name))
+    .sort()[0];
+  if (!path) return { colors: {} };
+  const scheme = first(parse(await read(zip, path)), A, "clrScheme");
+  const colors: Record<string, string> = {};
+  if (scheme) {
+    for (const entry of [...scheme.children]) {
+      const color = rawColor(entry);
+      if (color) colors[entry.localName] = color;
+    }
+  }
+  return { colors };
+}
+
+async function slideBackgroundColor(
+  zip: JSZip,
+  root: Element,
+  slidePath: string,
+  clrMap: Record<string, string>,
+  theme: Theme,
+): Promise<string | null> {
+  const own = backgroundOf(root, clrMap, theme);
+  if (own !== undefined) return own;
+
+  let path = await relatedPath(zip, slidePath, "/slideLayout");
+  for (let depth = 0; path && depth < 3; depth += 1) {
+    const parent = parse(await read(zip, path)).documentElement;
+    const value = backgroundOf(parent, clrMap, theme);
+    if (value !== undefined) return value;
+    path = path.includes("/slideLayouts/")
+      ? await relatedPath(zip, path, "/slideMaster")
+      : null;
+  }
+  return null;
+}
+
+function backgroundOf(
+  root: Element,
+  clrMap: Record<string, string>,
+  theme: Theme,
+): string | null | undefined {
+  const background = first(root, P, "bg");
+  if (!background) return undefined;
+  const properties = first(background, P, "bgPr");
+  if (properties) {
+    if (first(properties, A, "noFill")) return null;
+    const solid = first(properties, A, "solidFill");
+    if (solid) return colorNode(solid, clrMap, theme);
+    const gradient = first(properties, A, "gradFill");
+    if (gradient) {
+      const stop = first(gradient, A, "gs");
+      return stop ? colorNode(stop, clrMap, theme) : null;
+    }
+    const pattern = first(properties, A, "pattFill");
+    if (pattern) {
+      const foreground = first(pattern, A, "fgClr");
+      return foreground ? colorNode(foreground, clrMap, theme) : null;
+    }
+    return null;
+  }
+  const reference = first(background, P, "bgRef");
+  if (reference) {
+    if (reference.getAttribute("idx") === "0") return null;
+    return colorNode(reference, clrMap, theme);
+  }
+  return null;
+}
+
+function themeColor(name: string, clrMap: Record<string, string>, theme: Theme): string | null {
+  if (!name) return null;
+  const mapped = clrMap[name] ?? name;
+  return theme.colors[mapped] ?? theme.colors[name] ?? SCHEME[mapped] ?? SCHEME[name] ?? null;
+}
+
+function colorNode(parent: Element, clrMap: Record<string, string>, theme: Theme): string | null {
+  for (const child of [...parent.children]) {
+    if (child.localName === "srgbClr") return hexColor(child.getAttribute("val"));
+    if (child.localName === "sysClr") return hexColor(child.getAttribute("lastClr"));
+    if (child.localName === "schemeClr") {
+      return themeColor(child.getAttribute("val") ?? "", clrMap, theme);
+    }
+  }
+  return null;
+}
+
+function rawColor(node: Element): string | null {
+  for (const child of [...node.children]) {
+    if (child.localName === "srgbClr") return hexColor(child.getAttribute("val"));
+    if (child.localName === "sysClr") return hexColor(child.getAttribute("lastClr"));
+  }
+  return null;
+}
+
+function hexColor(value: string | null): string | null {
+  return value && /^[0-9a-fA-F]{6}$/.test(value) ? `#${value.toUpperCase()}` : null;
+}
+
+async function relatedPath(zip: JSZip, path: string, suffix: string): Promise<string | null> {
+  const file = zip.file(relsPath(path));
+  if (!file) return null;
+  for (const node of parse(await file.async("string")).getElementsByTagNameNS(PR, "Relationship")) {
+    const type = node.getAttribute("Type") ?? "";
+    const target = node.getAttribute("Target");
+    if (target && type.endsWith(suffix)) return join(dirname(path), target);
+  }
+  return null;
+}
+
+function dirname(path: string): string {
+  return path.split("/").slice(0, -1).join("/");
 }
 
 async function picture(
@@ -266,6 +386,7 @@ function textBox(
   sw: number,
   sh: number,
   clrMap: Record<string, string>,
+  theme: Theme,
 ): TextBox | null {
   const body = first(node, P, "txBody");
   if (!body) return null;
@@ -290,7 +411,7 @@ function textBox(
     text: textOf(node).slice(0, 800),
     fontFamily,
     fontSize: Number(fontSize.toFixed(5)),
-    color: colorOf(rpr, clrMap) || "#FFFFFF",
+    color: colorOf(rpr, clrMap, theme) || themeColor("tx1", clrMap, theme) || "#FFFFFF",
     align,
     anchor,
     italic: rpr?.getAttribute("i") === "1",
@@ -499,15 +620,10 @@ function textOf(node: Element): string {
   return lines.join("\n").replace(/\u00a0/g, " ").trim();
 }
 
-function colorOf(rpr: Element | undefined, clrMap: Record<string, string>): string | null {
+function colorOf(rpr: Element | undefined, clrMap: Record<string, string>, theme: Theme): string | null {
   if (!rpr) return null;
   const solid = first(rpr, A, "solidFill");
-  if (!solid) return null;
-  const srgb = first(solid, A, "srgbClr")?.getAttribute("val");
-  if (srgb) return `#${srgb}`;
-  const scheme = first(solid, A, "schemeClr")?.getAttribute("val") ?? "";
-  const mapped = clrMap[scheme] ?? scheme;
-  return SCHEME[mapped] ?? "#FFFFFF";
+  return solid ? colorNode(solid, clrMap, theme) : null;
 }
 
 function inset(bodyPr: Element | undefined, attr: string, axis: number): number {

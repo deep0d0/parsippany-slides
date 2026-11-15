@@ -129,6 +129,9 @@ function sanitizeSlide(slide: Slide): Slide | null {
     background: typeof slide.background === "string" && isMediaUrl(slide.background) ? slide.background : null,
     boxes: boxes.filter((box): box is TextBox => box !== null),
   };
+  if (typeof slide.backgroundColor === "string" && /^#[0-9a-fA-F]{6}$/.test(slide.backgroundColor)) {
+    cleaned.backgroundColor = slide.backgroundColor;
+  }
   const seconds = sanitizeSeconds(slide.advanceSeconds);
   if (seconds !== null) cleaned.advanceSeconds = seconds;
   if (typeof slide.sponsor === "boolean") cleaned.sponsor = slide.sponsor;
