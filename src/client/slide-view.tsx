@@ -154,7 +154,8 @@ function Line({
   const gesture = (handle?: Handle) => (event: ReactPointerEvent) => {
     if (!editable) return;
     event.stopPropagation();
-    onSelect?.(box.id, event.shiftKey);
+    // Resizing always keeps this object selected; Shift adjusts text scaling, not selection.
+    onSelect?.(box.id, handle ? false : event.shiftKey);
     if (box.locked || box.positionLocked) return;
     if (handle || image) onEdit?.(null);
     else if (editing) return;
@@ -184,7 +185,7 @@ function Line({
         localDy = (pixelX * sin + pixelY * cos) / stage.h;
       }
       const frame = handle ? resize(start.frame, handle, localDx, localDy) : move(start.frame, dx, dy);
-      latest = textScalePatch(start.frame, frame, handle, box);
+      latest = textScalePatch(start.frame, frame, handle, box, ev.shiftKey);
       onDraft(latest);
     };
     const onUp = () => {
@@ -306,12 +307,20 @@ function imageStyle(box: TextBox, stage: Stage): CSSProperties {
   };
 }
 
-/** Scale a text box's font with the dimension being resized, keeping images unchanged. */
-function textScalePatch(start: Frame, frame: Frame, handle: Handle | undefined, box: TextBox): FramePatch {
+/** Scale a text box's font only on corners or with Shift; side handles keep the font size. */
+function textScalePatch(
+  start: Frame,
+  frame: Frame,
+  handle: Handle | undefined,
+  box: TextBox,
+  shift: boolean,
+): FramePatch {
   if (!handle || isImageBox(box)) return frame;
   const horizontal = handle.includes("e") || handle.includes("w");
   const vertical = handle.includes("n") || handle.includes("s");
-  const scale = horizontal && vertical
+  const corner = horizontal && vertical;
+  if (!corner && !shift) return frame;
+  const scale = corner
     ? Math.min(frame.w / start.w, frame.h / start.h)
     : horizontal
       ? frame.w / start.w
