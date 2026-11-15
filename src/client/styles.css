@@ -361,6 +361,24 @@ button:disabled { cursor: default; }
   font-weight: 600;
 }
 
+.image-controls-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.object-lock {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.object-lock .hint {
+  font-size: 11px;
+}
+
 .image-slider {
   display: grid;
   grid-template-columns: 64px minmax(0, 1fr) 40px;
@@ -645,6 +663,7 @@ button:disabled { cursor: default; }
 }
 
 .slide.is-editable .line { cursor: move; }
+.slide.is-editable .line.is-locked { cursor: default; }
 
 .line.is-selected { overflow: visible; }
 
@@ -1067,6 +1086,13 @@ body[data-view="play"] { cursor: none; background: #000; overflow: hidden; }
 }
 
 .link-button:hover { color: var(--ink); }
+
+.link-button:disabled {
+  color: var(--muted);
+  opacity: 0.5;
+  text-decoration: none;
+  cursor: default;
+}
 
 .sheet-note {
   margin: 0 0 12px;

@@ -129,6 +129,7 @@ export function tidyFixes(group: TidyGroup, referenceId: string, slidePoints = 2
     if (slide.id === reference.id) continue;
     const number = group.numbers[group.slides.indexOf(slide)] ?? 0;
     for (const box of textBoxes(slide)) {
+      if (box.locked) continue;
       const match = matchingBox(referenceBoxes, box);
       if (!match) continue;
       const patch: BoxPatch = {};
@@ -193,7 +194,7 @@ export function applyTidyFixes(slides: Slide[], fixes: TidyFix[]): Slide[] {
     const box = next
       .find((slide) => slide.id === fix.slideId)
       ?.boxes.find((item) => item.id === fix.boxId);
-    if (box) Object.assign(box, fix.patch);
+    if (box && !box.locked) Object.assign(box, fix.patch);
   }
   return next;
 }

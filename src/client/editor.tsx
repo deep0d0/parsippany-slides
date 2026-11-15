@@ -127,8 +127,10 @@ export function Editor() {
       }
       if ((event.key === "Backspace" || event.key === "Delete") && !typing && selectedIds.length && slide) {
         event.preventDefault();
-        for (const boxId of selectedIds) send({ type: "deleteBox", slideId: slide.id, boxId });
-        setSelectedIds([]);
+        const removable = slide.boxes.filter((item) => selectedIds.includes(item.id) && !item.locked);
+        if (!removable.length) return;
+        for (const item of removable) send({ type: "deleteBox", slideId: slide.id, boxId: item.id });
+        setSelectedIds((current) => current.filter((id) => !removable.some((item) => item.id === id)));
         setEditingId(null);
       }
       const accel = (event.metaKey || event.ctrlKey) && !event.altKey;
@@ -201,20 +203,23 @@ export function Editor() {
   const visibleIndex = slide ? visibleSlides(state.deck).findIndex((item) => item.id === slide.id) : -1;
   const origin = window.location.origin;
   const patchBox = (patch: BoxPatch) => {
-    for (const boxId of selectedIds) send({ type: "updateBox", slideId: slide.id, boxId, patch });
+    for (const item of slide.boxes) {
+      if (!selectedIds.includes(item.id) || item.locked) continue;
+      send({ type: "updateBox", slideId: slide.id, boxId: item.id, patch });
+    }
   };
   const patchImage = (patch: BoxPatch) => {
-    if (!box || !isImageBox(box)) return;
+    if (!box || !isImageBox(box) || box.locked) return;
     send({ type: "updateBox", slideId: slide.id, boxId: box.id, patch });
   };
   const align = (edge: AlignEdge, target: AlignTarget) => {
-    const chosen = slide.boxes.filter((item) => selectedIds.includes(item.id));
+    const chosen = slide.boxes.filter((item) => selectedIds.includes(item.id) && !item.locked);
     for (const frame of alignFrames(chosen, target, edge)) {
       send({ type: "updateBox", slideId: slide.id, boxId: frame.id, patch: { x: frame.x, y: frame.y } });
     }
   };
   const distribute = (axis: DistributeAxis, target: AlignTarget) => {
-    const chosen = slide.boxes.filter((item) => selectedIds.includes(item.id));
+    const chosen = slide.boxes.filter((item) => selectedIds.includes(item.id) && !item.locked);
     for (const frame of distributeFrames(chosen, target, axis)) {
       send({ type: "updateBox", slideId: slide.id, boxId: frame.id, patch: { x: frame.x, y: frame.y } });
     }
@@ -223,7 +228,7 @@ export function Editor() {
     const stage = document.querySelector(".canvas .slide");
     if (!stage) return;
     const size = { w: stage.clientWidth, h: stage.clientHeight };
-    const chosen = slide.boxes.filter((item) => selectedIds.includes(item.id));
+    const chosen = slide.boxes.filter((item) => selectedIds.includes(item.id) && !item.locked);
     const patches: Array<{ boxId: string; patch: BoxPatch }> = [];
     for (const item of chosen) {
       const patch = await fitBox(item, size, mode);
@@ -257,6 +262,7 @@ export function Editor() {
     setEditingId(null);
   };
   const copyBox = (source: TextBox) => {
+    if (source.locked) return;
     const { id: _ignored, ...rest } = source;
     const created = isImageBox(source)
       ? imageBox(source.src, source.aspect ?? 16 / 9, source.fit)
@@ -292,11 +298,28 @@ export function Editor() {
     setPendingImage(null);
   };
   const applyImageFit = (fit: ImageFit) => {
-    const chosen = slide.boxes.filter((item) => selectedIds.includes(item.id) && isImageBox(item));
+    const chosen = slide.boxes.filter((item) => selectedIds.includes(item.id) && isImageBox(item) && !item.locked);
     for (const item of chosen) {
       const frame = fit === "cover" ? { x: 0, y: 0, w: 1, h: 1 } : nativeImageFrame(item.aspect ?? 16 / 9);
       send({ type: "updateBox", slideId: slide.id, boxId: item.id, patch: { fit, ...frame } });
     }
+  };
+  const useAsBackground = (source: TextBox) => {
+    if (!isImageBox(source) || source.locked) return;
+    applySlides(
+      state.deck.slides.map((item) =>
+        item.id === slide.id
+          ? { ...item, background: source.src, boxes: item.boxes.filter((candidate) => candidate.id !== source.id) }
+          : item,
+      ),
+    );
+    setSelectedIds([]);
+    setEditingId(null);
+  };
+  const clearBackground = (slideId: string) => {
+    const target = state.deck.slides.find((item) => item.id === slideId);
+    if (!target?.background) return;
+    applySlides(state.deck.slides.map((item) => (item.id === slideId ? { ...item, background: null } : item)));
   };
   const pickImage = async (file: File) => {
     setImageBusy("Saving the image");
@@ -361,6 +384,11 @@ export function Editor() {
           onSelect: () => send({ type: "visibility", slideId: target.id, hidden: !target.hidden }),
         },
         {
+          label: target.background ? "Remove background image" : "No background image",
+          disabled: !target.background,
+          onSelect: () => clearBackground(target.id),
+        },
+        {
           label: permanent ? "Attendance slide cannot be deleted" : "Delete",
           danger: true,
           disabled: permanent || state.deck.slides.length <= 1,
@@ -370,19 +398,35 @@ export function Editor() {
     }
     const target = slide.boxes.find((item) => item.id === menu.boxId) ?? box;
     const ids = target && selectedIds.includes(target.id) ? selectedIds : target ? [target.id] : [];
+    const selectedBoxes = slide.boxes.filter((item) => ids.includes(item.id));
+    const anyLocked = selectedBoxes.some((item) => item.locked);
+    const allLocked = selectedBoxes.length > 0 && selectedBoxes.every((item) => item.locked);
     const image = target && isImageBox(target);
     return [
-      { label: "Duplicate", disabled: !target, onSelect: () => target && copyBox(target) },
+      { label: "Duplicate", disabled: !target || anyLocked, onSelect: () => target && copyBox(target) },
+      {
+        label: allLocked ? "Unlock object" : "Lock object",
+        disabled: selectedBoxes.length === 0,
+        onSelect: () => {
+          const locked = !allLocked;
+          for (const item of selectedBoxes) {
+            if (item.locked !== locked) {
+              send({ type: "updateBox", slideId: slide.id, boxId: item.id, patch: { locked } });
+            }
+          }
+        },
+      },
       ...(image
         ? [
-            { label: "Scale to slide", onSelect: () => applyImageFit("cover") },
-            { label: "Keep proportions", onSelect: () => applyImageFit("contain") },
+            { label: "Scale to slide", disabled: anyLocked, onSelect: () => applyImageFit("cover") },
+            { label: "Keep proportions", disabled: anyLocked, onSelect: () => applyImageFit("contain") },
+            { label: "Set as background", disabled: anyLocked, onSelect: () => target && useAsBackground(target) },
           ]
         : []),
       {
         label: ids.length > 1 ? "Delete boxes" : "Delete",
         danger: true,
-        disabled: ids.length === 0,
+        disabled: ids.length === 0 || anyLocked,
         onSelect: () => {
           for (const boxId of ids) send({ type: "deleteBox", slideId: slide.id, boxId });
           setSelectedIds([]);
@@ -662,22 +706,47 @@ export function Editor() {
                 />
               ) : null}
 
+              {box ? (
+                <div className="object-lock">
+                  <button
+                    type="button"
+                    className={box.locked ? "tool is-on" : "tool"}
+                    aria-pressed={Boolean(box.locked)}
+                    onClick={() =>
+                      send({
+                        type: "updateBox",
+                        slideId: slide.id,
+                        boxId: box.id,
+                        patch: { locked: !box.locked },
+                      })
+                    }
+                  >
+                    {box.locked ? "Unlock object" : "Lock object"}
+                  </button>
+                  <span className="hint">
+                    {box.locked ? "Position and content are protected." : "Prevent accidental changes."}
+                  </span>
+                </div>
+              ) : null}
+
               <label className="field">
                 <span>{selectedImage ? "Image" : box ? "Selected line" : "Line"}</span>
                 <textarea
                   ref={lineField}
                   rows={4}
-                  disabled={!box || selectedImage}
+                  disabled={!box || selectedImage || Boolean(box.locked)}
                   placeholder={
                     selectedImage
                       ? "Scale to slide fills the slide. Keep proportions leaves the photo uncropped."
                       : box
-                        ? ""
+                        ? box.locked
+                          ? "Unlock this object to edit the text."
+                          : ""
                         : "Select a line on the slide"
                   }
                   defaultValue={box && !selectedImage ? box.text : ""}
                   onInput={(event) => {
-                    if (!box || selectedImage) return;
+                    if (!box || selectedImage || box.locked) return;
                     send({
                       type: "text",
                       slideId: slide.id,
@@ -691,24 +760,35 @@ export function Editor() {
                 <div className="image-controls">
                   <div className="image-controls-head">
                     <h3>Image adjustments</h3>
-                    <button
-                      type="button"
-                      className="link-button"
-                      onClick={() =>
-                        patchImage({
-                          rotation: 0,
-                          flipX: false,
-                          flipY: false,
-                          opacity: 1,
-                          cropTop: 0,
-                          cropRight: 0,
-                          cropBottom: 0,
-                          cropLeft: 0,
-                        })
-                      }
-                    >
-                      Reset
-                    </button>
+                    <div className="image-controls-actions">
+                      <button
+                        type="button"
+                        className="link-button"
+                        disabled={Boolean(box.locked)}
+                        onClick={() => useAsBackground(box)}
+                      >
+                        Set as background
+                      </button>
+                      <button
+                        type="button"
+                        className="link-button"
+                        disabled={Boolean(box.locked)}
+                        onClick={() =>
+                          patchImage({
+                            rotation: 0,
+                            flipX: false,
+                            flipY: false,
+                            opacity: 1,
+                            cropTop: 0,
+                            cropRight: 0,
+                            cropBottom: 0,
+                            cropLeft: 0,
+                          })
+                        }
+                      >
+                        Reset
+                      </button>
+                    </div>
                   </div>
                   <label className="image-slider">
                     <span>Rotation</span>
@@ -717,6 +797,7 @@ export function Editor() {
                       min={-180}
                       max={180}
                       step={1}
+                      disabled={Boolean(box.locked)}
                       value={box.rotation ?? 0}
                       onChange={(event) => patchImage({ rotation: Number(event.currentTarget.value) })}
                     />
@@ -727,6 +808,7 @@ export function Editor() {
                       type="button"
                       className={box.flipX ? "tool is-on" : "tool"}
                       aria-pressed={Boolean(box.flipX)}
+                      disabled={Boolean(box.locked)}
                       onClick={() => patchImage({ flipX: !box.flipX })}
                     >
                       Flip horizontal
@@ -735,6 +817,7 @@ export function Editor() {
                       type="button"
                       className={box.flipY ? "tool is-on" : "tool"}
                       aria-pressed={Boolean(box.flipY)}
+                      disabled={Boolean(box.locked)}
                       onClick={() => patchImage({ flipY: !box.flipY })}
                     >
                       Flip vertical
@@ -747,6 +830,7 @@ export function Editor() {
                       min={0}
                       max={100}
                       step={1}
+                      disabled={Boolean(box.locked)}
                       value={Math.round((box.opacity ?? 1) * 100)}
                       onChange={(event) => patchImage({ opacity: Number(event.currentTarget.value) / 100 })}
                     />
@@ -763,6 +847,7 @@ export function Editor() {
                             min={0}
                             max={45}
                             step={1}
+                            disabled={Boolean(box.locked)}
                             value={Math.round((box[key] ?? 0) * 100)}
                             onChange={(event) => {
                               const percent = Number(event.currentTarget.value);

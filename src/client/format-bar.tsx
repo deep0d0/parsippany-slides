@@ -32,6 +32,7 @@ export function FormatBar({
 }) {
   const image = box ? isImageBox(box) : false;
   const text = image ? null : box;
+  const locked = Boolean(box?.locked);
   const points = text ? Math.round(text.fontSize * slidePoints) : 80;
   const [sizeDraft, setSizeDraft] = useState<string | null>(null);
   const [alignTarget, setAlignTarget] = useState<AlignTarget>("slide");
@@ -65,7 +66,7 @@ export function FormatBar({
           <span className="sr">Font</span>
           <select
             aria-label="Font"
-            disabled={!text}
+            disabled={!text || locked}
             value={text?.fontFamily ?? "Visby CF Extra Bold"}
             onChange={(event) => onPatch({ fontFamily: event.target.value })}
           >
@@ -81,7 +82,7 @@ export function FormatBar({
           <input
             aria-label="Font size"
             inputMode="numeric"
-            disabled={!text}
+            disabled={!text || locked}
             value={sizeDraft ?? (text ? String(points) : "")}
             onFocus={() => setSizeDraft(String(points))}
             onChange={(event) => {
@@ -101,7 +102,7 @@ export function FormatBar({
           type="button"
           className={text?.italic ? "tool is-on" : "tool"}
           aria-pressed={Boolean(text?.italic)}
-          disabled={!text}
+          disabled={!text || locked}
           onClick={() => text && onPatch({ italic: !text.italic })}
         >
           Italic
@@ -112,7 +113,7 @@ export function FormatBar({
           type="button"
           className={alignTarget === "selection" ? "tool is-on" : "tool"}
           aria-pressed={alignTarget === "selection"}
-          disabled={!box}
+          disabled={!box || locked}
           onClick={() => setAlignTarget("selection")}
         >
           Selection
@@ -121,7 +122,7 @@ export function FormatBar({
           type="button"
           className={alignTarget === "slide" ? "tool is-on" : "tool"}
           aria-pressed={alignTarget === "slide"}
-          disabled={!box}
+          disabled={!box || locked}
           onClick={() => setAlignTarget("slide")}
         >
           Slide
@@ -132,7 +133,7 @@ export function FormatBar({
             type="button"
             className="tool is-icon"
             aria-label={`Align ${edge} to ${alignTarget}`}
-            disabled={!box}
+            disabled={!box || locked}
             onClick={() => onAlign(edge, alignTarget)}
           >
             <AlignIcon edge={edge} />
@@ -144,7 +145,7 @@ export function FormatBar({
             type="button"
             className="tool is-icon"
             aria-label={`Distribute ${axis} across ${alignTarget}`}
-            disabled={!canDistribute}
+            disabled={!canDistribute || locked}
             onClick={() => onDistribute(axis, alignTarget)}
           >
             <DistributeIcon axis={axis} />
@@ -152,10 +153,10 @@ export function FormatBar({
         ))}
       </div>
       <div className="ribbon-group" role="group" aria-label="Text fitting">
-        <button type="button" className="tool" disabled={!text} onClick={() => onFit("width")}>
+        <button type="button" className="tool" disabled={!text || locked} onClick={() => onFit("width")}>
           Slide width
         </button>
-        <button type="button" className="tool" disabled={!text} onClick={() => onFit("text")}>
+        <button type="button" className="tool" disabled={!text || locked} onClick={() => onFit("text")}>
           Fit text
         </button>
       </div>
@@ -164,7 +165,7 @@ export function FormatBar({
           type="button"
           className={image && box?.fit === "cover" ? "tool is-on" : "tool"}
           aria-pressed={image && box?.fit === "cover"}
-          disabled={!image}
+          disabled={!image || locked}
           onClick={() => onImageFit("cover")}
         >
           Scale to slide
@@ -173,7 +174,7 @@ export function FormatBar({
           type="button"
           className={image && box?.fit === "contain" ? "tool is-on" : "tool"}
           aria-pressed={image && box?.fit === "contain"}
-          disabled={!image}
+          disabled={!image || locked}
           onClick={() => onImageFit("contain")}
         >
           Keep proportions
@@ -186,7 +187,7 @@ export function FormatBar({
             type="button"
             className={text?.align === align ? "tool is-on" : "tool"}
             aria-pressed={text?.align === align}
-            disabled={!text}
+            disabled={!text || locked}
             onClick={() => onPatch({ align })}
           >
             {align === "left" ? "Left" : align === "center" ? "Center" : "Right"}
@@ -206,7 +207,7 @@ export function FormatBar({
             type="button"
             className={text?.anchor === anchor ? "tool is-on" : "tool"}
             aria-pressed={text?.anchor === anchor}
-            disabled={!text}
+            disabled={!text || locked}
             onClick={() => onPatch({ anchor })}
           >
             {label}
@@ -221,7 +222,7 @@ export function FormatBar({
             className={text?.color.toLowerCase() === color.toLowerCase() ? "swatch is-on" : "swatch"}
             style={{ background: color }}
             aria-label={color}
-            disabled={!text}
+            disabled={!text || locked}
             onClick={() => onPatch({ color })}
           />
         ))}
@@ -229,7 +230,7 @@ export function FormatBar({
           className="color-input"
           type="color"
           aria-label="Custom color"
-          disabled={!text}
+          disabled={!text || locked}
           value={text?.color ?? "#FFFFFF"}
           onChange={(event) => onPatch({ color: event.target.value })}
         />

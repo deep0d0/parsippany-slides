@@ -78,8 +78,8 @@ export function SlideView({
                 stage={stage}
                 editable={editable}
                 selected={selectedIds.includes(box.id)}
-                handles={selectedIds[selectedIds.length - 1] === box.id}
-                editing={editingId === box.id && !isImageBox(box)}
+                handles={selectedIds[selectedIds.length - 1] === box.id && !box.locked}
+                editing={editingId === box.id && !isImageBox(box) && !box.locked}
                 onSelect={onSelect}
                 onEdit={onEdit}
                 onText={onText}
@@ -147,6 +147,7 @@ function Line({
     if (!editable) return;
     event.stopPropagation();
     onSelect?.(box.id, event.shiftKey);
+    if (box.locked) return;
     if (handle || image) onEdit?.(null);
     else if (editing) return;
 
@@ -188,7 +189,7 @@ function Line({
 
   return (
     <div
-      className={["line", image ? "is-image" : "", selected ? "is-selected" : "", editing ? "is-editing" : "", empty ? "is-empty" : ""]
+      className={["line", image ? "is-image" : "", selected ? "is-selected" : "", editing ? "is-editing" : "", empty ? "is-empty" : "", box.locked ? "is-locked" : ""]
         .filter(Boolean)
         .join(" ")}
       style={{
@@ -214,7 +215,7 @@ function Line({
         onContextMenu?.(box.id, event.clientX, event.clientY);
       }}
       onDoubleClick={(event) => {
-        if (!editable || image) return;
+        if (!editable || image || box.locked) return;
         event.stopPropagation();
         onEdit?.(box.id);
       }}
@@ -230,7 +231,7 @@ function Line({
         <div
           ref={textRef}
           className="line-text"
-          contentEditable={editable && editing}
+          contentEditable={editable && editing && !box.locked}
           suppressContentEditableWarning
           role={editable ? "textbox" : undefined}
           aria-label={box.text || "Empty text box"}

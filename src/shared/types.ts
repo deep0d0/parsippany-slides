@@ -40,6 +40,8 @@ export type TextBox = {
   padBottom: number;
   padLeft: number;
   kind?: "text" | "image";
+  /** Prevent edits, movement, resizing, and deletion from the editor. */
+  locked?: boolean;
   src?: string;
   fit?: ImageFit;
   aspect?: number;
@@ -71,6 +73,7 @@ export type BoxPatch = Partial<
     | "align"
     | "anchor"
     | "italic"
+    | "locked"
     | "fit"
     | "rotation"
     | "flipX"

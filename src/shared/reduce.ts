@@ -85,6 +85,8 @@ function sanitizeBox(box: TextBox): TextBox | null {
     padBottom: clampUnit(box.padBottom ?? 0, 0, 0.2),
     padLeft: clampUnit(box.padLeft ?? 0, 0, 0.2),
   };
+  if (box.locked === true) cleaned.locked = true;
+  else delete cleaned.locked;
   if (box.kind === "image") {
     if (typeof box.src !== "string" || !isMediaUrl(box.src)) return null;
     cleaned.kind = "image";
@@ -152,6 +154,7 @@ function applyPatch(box: TextBox, patch: BoxPatch) {
   if (patch.align === "left" || patch.align === "center" || patch.align === "right") box.align = patch.align;
   if (patch.anchor === "start" || patch.anchor === "center" || patch.anchor === "end") box.anchor = patch.anchor;
   if (typeof patch.italic === "boolean") box.italic = patch.italic;
+  if (typeof patch.locked === "boolean") box.locked = patch.locked;
   if (typeof patch.padTop === "number") box.padTop = clampUnit(patch.padTop, 0, 0.2);
   if (typeof patch.padRight === "number") box.padRight = clampUnit(patch.padRight, 0, 0.2);
   if (typeof patch.padBottom === "number") box.padBottom = clampUnit(patch.padBottom, 0, 0.2);
@@ -190,7 +193,7 @@ export function reduce(state: RoomState, message: ClientMessage): RoomState {
 
   if (message.type === "text") {
     const box = findBox(next, message.slideId, message.boxId);
-    if (!box || box.kind === "image" || typeof message.text !== "string") return state;
+    if (!box || box.locked || box.kind === "image" || typeof message.text !== "string") return state;
     box.text = message.text.slice(0, 800);
     return next;
   }
@@ -198,6 +201,7 @@ export function reduce(state: RoomState, message: ClientMessage): RoomState {
   if (message.type === "updateBox") {
     const box = findBox(next, message.slideId, message.boxId);
     if (!box || !message.patch) return state;
+    if (box.locked && Object.keys(message.patch).some((key) => key !== "locked")) return state;
     applyPatch(box, message.patch);
     return next;
   }
@@ -214,7 +218,8 @@ export function reduce(state: RoomState, message: ClientMessage): RoomState {
 
   if (message.type === "deleteBox") {
     const slide = next.deck.slides.find((item) => item.id === message.slideId);
-    if (!slide) return state;
+    const target = slide?.boxes.find((item) => item.id === message.boxId);
+    if (!slide || !target || target.locked) return state;
     const before = slide.boxes.length;
     slide.boxes = slide.boxes.filter((item) => item.id !== message.boxId);
     return slide.boxes.length === before ? state : next;
