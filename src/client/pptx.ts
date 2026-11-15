@@ -43,6 +43,7 @@ export type ImportedPptx = {
 };
 
 type Theme = { colors: Record<string, string> };
+type Background = { color: string | null; image: string | null };
 
 type StoredPicture = {
   name: string;
@@ -75,6 +76,7 @@ export async function importPptx(file: File): Promise<ImportedPptx> {
 
   const media: PptxMedia[] = [];
   const used = new Set<string>();
+  const backgroundCache = new Map<string, string>();
   const unsupported = new Set<number>();
   const slides: Slide[] = [];
 
@@ -83,8 +85,18 @@ export async function importPptx(file: File): Promise<ImportedPptx> {
     const root = parse(await read(zip, path)).documentElement;
     const rels = await relationships(zip, relsPath(path));
     const tree = first(root, P, "spTree");
-    const backgroundColor = await slideBackgroundColor(zip, root, path, clrMap, theme);
-    let background: string | null = null;
+    const backgroundInfo = await slideBackground(
+      zip,
+      root,
+      path,
+      rels,
+      clrMap,
+      theme,
+      used,
+      media,
+      backgroundCache,
+    );
+    let background = backgroundInfo.image;
     let needsRaster = false;
     const boxes: TextBox[] = [];
 
@@ -158,7 +170,7 @@ export async function importPptx(file: File): Promise<ImportedPptx> {
       background,
       boxes,
     };
-    if (backgroundColor) slide.backgroundColor = backgroundColor;
+    if (backgroundInfo.color) slide.backgroundColor = backgroundInfo.color;
     slides.push(slide);
   }
 
@@ -217,58 +229,112 @@ async function themeOf(zip: JSZip): Promise<Theme> {
   return { colors };
 }
 
-async function slideBackgroundColor(
+async function slideBackground(
   zip: JSZip,
   root: Element,
   slidePath: string,
+  rels: Record<string, string>,
   clrMap: Record<string, string>,
   theme: Theme,
-): Promise<string | null> {
-  const own = backgroundOf(root, clrMap, theme);
+  used: Set<string>,
+  media: PptxMedia[],
+  cache: Map<string, string>,
+): Promise<Background> {
+  const own = await backgroundOf(zip, root, slidePath, rels, clrMap, theme, used, media, cache);
   if (own !== undefined) return own;
 
   let path = await relatedPath(zip, slidePath, "/slideLayout");
   for (let depth = 0; path && depth < 3; depth += 1) {
     const parent = parse(await read(zip, path)).documentElement;
-    const value = backgroundOf(parent, clrMap, theme);
+    const partRels = await relationships(zip, relsPath(path));
+    const value = await backgroundOf(
+      zip,
+      parent,
+      path,
+      partRels,
+      clrMap,
+      theme,
+      used,
+      media,
+      cache,
+    );
     if (value !== undefined) return value;
     path = path.includes("/slideLayouts/")
       ? await relatedPath(zip, path, "/slideMaster")
       : null;
   }
-  return null;
+  return { color: null, image: null };
 }
 
-function backgroundOf(
+async function backgroundOf(
+  zip: JSZip,
   root: Element,
+  partPath: string,
+  rels: Record<string, string>,
   clrMap: Record<string, string>,
   theme: Theme,
-): string | null | undefined {
+  used: Set<string>,
+  media: PptxMedia[],
+  cache: Map<string, string>,
+): Promise<Background | undefined> {
   const background = first(root, P, "bg");
   if (!background) return undefined;
   const properties = first(background, P, "bgPr");
   if (properties) {
-    if (first(properties, A, "noFill")) return null;
+    if (first(properties, A, "noFill")) return { color: null, image: null };
+    const imageFill = first(properties, A, "blipFill");
+    if (imageFill) {
+      return {
+        color: null,
+        image: await backgroundImage(zip, imageFill, partPath, rels, used, media, cache),
+      };
+    }
     const solid = first(properties, A, "solidFill");
-    if (solid) return colorNode(solid, clrMap, theme);
+    if (solid) return { color: colorNode(solid, clrMap, theme), image: null };
     const gradient = first(properties, A, "gradFill");
     if (gradient) {
       const stop = first(gradient, A, "gs");
-      return stop ? colorNode(stop, clrMap, theme) : null;
+      return { color: stop ? colorNode(stop, clrMap, theme) : null, image: null };
     }
     const pattern = first(properties, A, "pattFill");
     if (pattern) {
       const foreground = first(pattern, A, "fgClr");
-      return foreground ? colorNode(foreground, clrMap, theme) : null;
+      return { color: foreground ? colorNode(foreground, clrMap, theme) : null, image: null };
     }
-    return null;
+    return { color: null, image: null };
   }
   const reference = first(background, P, "bgRef");
   if (reference) {
-    if (reference.getAttribute("idx") === "0") return null;
-    return colorNode(reference, clrMap, theme);
+    if (reference.getAttribute("idx") === "0") return { color: null, image: null };
+    return { color: colorNode(reference, clrMap, theme), image: null };
   }
-  return null;
+  return { color: null, image: null };
+}
+
+async function backgroundImage(
+  zip: JSZip,
+  fill: Element,
+  partPath: string,
+  rels: Record<string, string>,
+  used: Set<string>,
+  media: PptxMedia[],
+  cache: Map<string, string>,
+): Promise<string | null> {
+  const blip = first(fill, A, "blip");
+  const rid = blip?.getAttributeNS(R, "embed") || blip?.getAttribute("r:embed") || "";
+  const target = rels[rid];
+  if (!target) return null;
+  const path = join(dirname(partPath), target);
+  const cached = cache.get(path);
+  if (cached) return cached;
+  const file = zip.file(path);
+  const mime = MIME[extension(path)];
+  if (!file || !mime) return null;
+  const name = uniqueName(basename(path), used);
+  const bytes = await file.async("uint8array");
+  media.push({ name, mime, bytes });
+  cache.set(path, name);
+  return name;
 }
 
 function themeColor(name: string, clrMap: Record<string, string>, theme: Theme): string | null {
